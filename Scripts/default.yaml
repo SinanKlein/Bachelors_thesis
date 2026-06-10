@@ -1,0 +1,89 @@
+# =============================================================================
+# Pipeline configuration
+# =============================================================================
+# Everything that changes between runs lives here. Code never hardcodes values.
+
+# --- Preprocessing -----------------------------------------------------------
+preprocess:
+  reducer: mean_variance         # one of: mean_variance, identity  (later: svd)
+  quantile: 0.10                 # keep top 10% by variance score
+  apply_to:                      # which feature matrices in graph_data.npz to filter
+    - Xb
+    - Xv
+  standardize: true              # z-score before computing variance ranking
+
+# --- Resampling --------------------------------------------------------------
+resampling:
+  n_outer: 10
+  n_inner: 5
+  stratify: true                 # stratify on the y task label
+  seed: 42
+
+# --- Tasks -------------------------------------------------------------------
+# Each task has a `task_type` that drives which models / metrics are used.
+#   binary     : classifiers, predict_proba, AUC/AP/Brier + cutoff sweep
+#   regression : regressors, predict, R2/MSE/MAE
+#
+# label_source = key in graph_data.npz holding the label
+# mask_source  = optional key holding 0/1 mask (only rows with mask=1 are used)
+# binarize     = if true, label is converted to (label > 0).astype(int)
+tasks:
+  - name: y
+    task_type: binary
+    label_source: Y_binary
+    mask_source: null
+
+  - name: w_reg
+    task_type: regression
+    label_source: W_continuous
+    mask_source: Mask_observed
+    binarize: false              # use the raw continuous W
+
+# --- Models (plug and play) --------------------------------------------------
+# Each model has a `task_type` so the experiment only runs it on matching tasks.
+# Adding a model = one entry here + one class in models.py registry.
+models:
+  - name: sparse_logistic
+    class: sparse_logistic
+    task_type: binary
+    params:
+      C: 1.0
+      penalty: l1
+      solver: liblinear
+      max_iter: 2000
+
+  - name: xgb_clf
+    class: xgb_clf
+    task_type: binary
+    params:
+      n_estimators: 500
+      max_depth: 4
+      learning_rate: 0.05
+      subsample: 0.8
+      colsample_bytree: 0.8
+
+  - name: linreg
+    class: linreg
+    task_type: regression
+    params:
+      alpha: 1.0                 # ridge regularization (alpha=0 -> OLS)
+
+  - name: xgb_reg
+    class: xgb_reg
+    task_type: regression
+    params:
+      n_estimators: 500
+      max_depth: 4
+      learning_rate: 0.05
+      subsample: 0.8
+      colsample_bytree: 0.8
+
+# --- Evaluation --------------------------------------------------------------
+evaluation:
+  cutoff_grid_start: 0.01
+  cutoff_grid_stop: 0.99
+  cutoff_grid_step: 0.01
+
+# --- Logging -----------------------------------------------------------------
+logging:
+  verbosity: 1                   # 0 = silent, 1 = per outer fold, 2 = per inner fold
