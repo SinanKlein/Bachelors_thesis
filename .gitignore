@@ -1,7 +1,24 @@
 # ---- data and results: too large for git, archived separately -------------
 datas_final/
-results_modularPipe/
 multimodal_network/
+
+# results: keep the plots, the metrics and the logs; leave out the bulky
+# per-pair intermediates (predictions, latents, splits, feature_stats, npz)
+results_modularPipe/**
+!results_modularPipe/**/
+!results_modularPipe/**/*.png
+!results_modularPipe/**/*.json
+!results_modularPipe/**/config.yaml
+!results_modularPipe/**/metrics_by_fold.csv
+!results_modularPipe/**/descriptives.csv
+!results_modularPipe/**/w_threshold_sweep.csv
+!results_modularPipe/**/w_threshold_sweep_summary.csv
+!results_modularPipe/**/ablation_metrics.csv
+!results_modularPipe/**/family_metrics.csv
+!results_modularPipe/**/shuffle_probe_metrics.csv
+!results_modularPipe/**/shuffle_probe_summary.csv
+!results_modularPipe/**/outer_test_summary.csv
+!results_modularPipe/**/w_threshold_auc_summary.csv
 *.npz
 *.rds
 

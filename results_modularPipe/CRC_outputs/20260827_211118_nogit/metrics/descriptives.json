@@ -1,0 +1,67 @@
+{
+  "grid": {
+    "n_bacteria": 75,
+    "n_viruses": 186,
+    "n_pairs": 13950,
+    "n_crispr_positive": 430,
+    "crispr_prevalence": 0.03082437275985663
+  },
+  "mask": {
+    "n_bacteria_matched": 62,
+    "n_viruses_matched": 93,
+    "n_observed": 5766,
+    "coverage_of_grid": 0.41333333333333333,
+    "n_crispr_positive": 198,
+    "crispr_prevalence": 0.03433922996878252,
+    "n_glasso_edge": 2473,
+    "glasso_prevalence": 0.4288935137010059,
+    "w_mean": 0.08254249046132502,
+    "w_sd": 0.1823779827635983,
+    "w_median": 0.0,
+    "w_frac_exactly_zero": 0.5711064862989941,
+    "w_frac_above_half": 0.053069719042663895,
+    "n_both": 84,
+    "n_both_expected_if_independent": 84.92091571279917,
+    "both_observed_over_expected": 0.9891556078373708
+  },
+  "degree_grid": {
+    "n_edges": 430,
+    "genus_degree_median": 2.0,
+    "genus_degree_mean": 5.733333333333333,
+    "genus_degree_max": 54,
+    "genus_degree_zero": 0,
+    "votu_degree_median": 2.0,
+    "votu_degree_mean": 2.3118279569892475,
+    "votu_degree_max": 10,
+    "votu_degree_zero": 0,
+    "top10_genera_share_of_edges": 0.5883720930232558
+  },
+  "degree_mask": {
+    "n_edges": 198,
+    "genus_degree_median": 2.0,
+    "genus_degree_mean": 3.193548387096774,
+    "genus_degree_max": 25,
+    "genus_degree_zero": 14,
+    "votu_degree_median": 2.0,
+    "votu_degree_mean": 2.129032258064516,
+    "votu_degree_max": 9,
+    "votu_degree_zero": 10,
+    "top10_genera_share_of_edges": 0.601010101010101
+  },
+  "features_bacteria": {
+    "n_entities": 75,
+    "n_clusters": 70625,
+    "density": 0.08097472566371682,
+    "clusters_per_entity_median": 3765.0,
+    "clusters_per_entity_min": 952,
+    "clusters_per_entity_max": 54281
+  },
+  "features_viruses": {
+    "n_entities": 186,
+    "n_clusters": 2756,
+    "density": 0.014026093606130125,
+    "clusters_per_entity_median": 30.0,
+    "clusters_per_entity_min": 1,
+    "clusters_per_entity_max": 202
+  }
+}
