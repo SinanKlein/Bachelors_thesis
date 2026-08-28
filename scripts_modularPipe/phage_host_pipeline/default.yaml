@@ -1,0 +1,345 @@
+# =============================================================================
+# Pipeline configuration
+# =============================================================================
+# Everything that changes between runs lives here. Code never hardcodes values.
+
+# --- Preprocessing -----------------------------------------------------------
+preprocess:
+  # --- the representation: the same three switches the ablation varies -------
+  # Set to ARM 4 of the ablation ladder (presence/absence + equal_dim + sum).
+  #   selection : quantile   per-source top fraction by RAW variance
+  #               equal_dim  all Xv procs + top-|Xv| Xb procs (equal widths)
+  #   transform : clr | presence_absence
+  #   combine   : concat | sum      (sum REQUIRES selection: equal_dim)
+  # Chosen from the CRC ablation on the `y` control: arm 4 has the highest mean
+  # AUC for both nonlinear models (mlp 0.812, xgb 0.810 vs 0.768 / 0.771 at arm
+  # 1), and the arm-4-vs-arm-1 gain is significant paired across the shared
+  # folds. Caveat worth keeping in the write-up: arm 4 is NOT separable from
+  # arms 2 and 3 (arm4 vs arm3 p=0.46 / 0.40), and equal_dim costs the linear
+  # baseline ~0.02 AUC, so arms 2-4 are really one cluster above arm 1.
+  selection: equal_dim
+  transform: presence_absence
+  combine: sum
+
+  reducer: mean_variance         # one of: mean_variance, identity  (later: svd)
+  # Per-source keep-fraction (top quantile by variance score).
+  # A single number still works and applies to every source; a mapping lets you
+  # set a different fraction per feature matrix.
+  quantile:
+    Xb: 0.025                    # bacteria: keep top 2.5% by variance
+    Xv: 0.10                     # virus:    keep top 10% by variance
+  apply_to:                      # which feature matrices in graph_data.npz to filter
+    - Xb
+    - Xv
+  # Variance is computed on raw counts. The selected features are then CLR-transformed.
+  standardize: false             # kept only for old configs; ignored by the reducer
+  clr_pseudocount: 0.5           # add before centered log-ratio transformation
+
+# --- Resampling --------------------------------------------------------------
+resampling:
+  n_outer: 10
+  n_inner: 0                     # no inner CV; only 10 train/test splits
+  stratify: true                 # stratify on the y task label
+  seed: 42
+
+# --- Tasks -------------------------------------------------------------------
+# Each task has a `task_type` that drives which models / metrics are used.
+#   binary     : classifiers, predict_proba, AUC + AP (plus the cutoff sweep)
+#   regression : regressors, predict, R2
+#
+# label_source = key in graph_data.npz holding the label
+# mask_source  = optional key holding 0/1 mask (only rows with mask=1 are used)
+# binarize     = if true, label is converted to (label > 0).astype(int)
+tasks:
+  - name: y
+    task_type: binary
+    label_source: Y_binary
+    mask_source: Mask_observed   # restrict Y to the W-observed intersection so every
+                                 # model (y-only, w-only, joint) trains/evaluates on the
+                                 # SAME pair set. Y is defined on the whole grid, so
+                                 # Y-observed ∩ W-observed == W-observed == Mask_observed.
+                                 # Set back to null to train Y on the full grid again.
+
+  - name: w_reg
+    task_type: regression
+    label_source: W_continuous
+    mask_source: Mask_observed
+    binarize: false              # use the raw continuous W
+    transform: logit             # target transform for W only; feature log1p transform is removed
+
+  - name: w_class
+    task_type: binary
+    label_source: W_continuous   # binarize the continuous glasso edge probability
+    mask_source: Mask_observed
+    binarize: true
+    binarize_threshold: 0.0      # w_class = 1[W > 0]: edge present vs absent.
+                                 # W is a glasso edge PROBABILITY in [0,1] and is
+                                 # exactly 0 for the majority of observed pairs
+                                 # (CRC 57%, GvHD 51%, IBD 62%), so "> 0" is the
+                                 # natural presence/absence split and gives a
+                                 # balanced target (prevalence 0.43 / 0.49 / 0.38).
+                                 # A 0.5 cut instead leaves only 5-7% positives,
+                                 # which is what made this task look unlearnable
+                                 # for the wrong reason. Use 0 everywhere.
+
+# --- Models (plug and play) --------------------------------------------------
+# Each model has a `task_type` so the experiment only runs it on matching tasks.
+# Adding a model = one entry here + one class in models.py registry.
+#   target_task (optional): pins a model to a single task by name. A model with
+#   target_task set is trained/tested/plotted ONLY on that task; without it, a
+#   model runs on every task matching its task_type (the classic baseline sweep).
+models:
+  # --- baselines: run on every task of their type -----------------------------
+  - name: sparse_logistic
+    class: sparse_logistic
+    task_type: binary
+    params:
+      C: 1.0
+      penalty: l1
+      solver: liblinear
+      max_iter: 2000
+
+  - name: xgb_clf
+    class: xgb_clf
+    task_type: binary
+    params:
+      n_estimators: 500
+      max_depth: 4
+      learning_rate: 0.05
+      subsample: 0.8
+      colsample_bytree: 0.8
+
+  - name: linreg
+    class: linreg
+    task_type: regression
+    params:
+      alpha: 1.0                 # ridge regularization (alpha=0 -> OLS)
+
+  - name: xgb_reg
+    class: xgb_reg
+    task_type: regression
+    params:
+      n_estimators: 500
+      max_depth: 4
+      learning_rate: 0.05
+      subsample: 0.8
+      colsample_bytree: 0.8
+
+  # --- plain MLP baselines: one per task (pinned) -----------------------------
+  - name: mlp_clf_y
+    class: mlp_clf
+    task_type: binary
+    target_task: y
+    params:
+      hidden_dim: 64
+      dropout: 0.3
+      batch_size: 512
+      lr: 3.0e-4
+      weight_decay: 1.0e-3
+      n_epochs: 200
+
+  - name: mlp_clf_w_class
+    class: mlp_clf
+    task_type: binary
+    target_task: w_class
+    params:
+      hidden_dim: 64
+      dropout: 0.3
+      batch_size: 512
+      lr: 3.0e-4
+      weight_decay: 1.0e-3
+      n_epochs: 200
+
+  - name: mlp_reg
+    class: mlp_reg
+    task_type: regression
+    target_task: w_reg
+    params:
+      hidden_dim: 64
+      dropout: 0.3
+      batch_size: 512
+      lr: 3.0e-4
+      weight_decay: 1.0e-3
+      n_epochs: 200
+
+  # --- latent-space MLPs: exported, each pinned to its own task ---------------
+  # Same architecture as the plain MLP baselines; these are the ones whose hidden
+  # activation is exported as a latent space by latent.py.
+  - name: mlp_latent_y
+    class: mlp_clf
+    task_type: binary
+    target_task: y
+    params:
+      hidden_dim: 64
+      dropout: 0.3
+      batch_size: 512
+      lr: 3.0e-4
+      weight_decay: 1.0e-3
+      n_epochs: 200
+
+  - name: mlp_latent_w_class
+    class: mlp_clf
+    task_type: binary
+    target_task: w_class
+    params:
+      hidden_dim: 64
+      dropout: 0.3
+      batch_size: 512
+      lr: 3.0e-4
+      weight_decay: 1.0e-3
+      n_epochs: 200
+
+  - name: mlp_latent_yw
+    class: mlp_yw_joint
+    task_type: joint_y_w
+    params:
+      hidden_dim: 64            # the shared post-ReLU hidden trunk is the joint latent
+      dropout: 0.3
+      batch_size: 512
+      lr: 3.0e-4
+      weight_decay: 1.0e-3
+      n_epochs: 200
+      lambda_y: 1.0
+      lambda_w: 1.0
+
+# --- Evaluation --------------------------------------------------------------
+evaluation:
+  cutoff_grid_start: 0.01
+  cutoff_grid_stop: 0.99
+  cutoff_grid_step: 0.01
+  logit_eps: 1.0e-3             # clip used by the W logit target transform: clip(W, eps, 1-eps)
+
+# --- Logging -----------------------------------------------------------------
+logging:
+  verbosity: 1                   # 0 = silent, 1 = per outer fold, 2 = per inner fold
+
+# --- Block 1: W-threshold AUC sweep -------------------------------------------
+# For 10 evenly spaced interior thresholds t in (0,1), fit an L2 ("ridge-style")
+# logistic on X predicting 1[W > t] and score test AUC over the 10 outer splits.
+# Only AUC is needed, so L2 + lbfgs replaces the old L1/liblinear model (much
+# faster). Fits run in parallel via joblib (n_jobs=-1 uses all cores).
+w_threshold:
+  enabled: true
+  w_task: w_reg          # task whose continuous y holds the W edge probabilities
+  n_cuts: 10             # number of evenly spaced interior thresholds in (0,1)
+  solver: lbfgs          # fast L2 solver; alternatives: newton-cg, saga
+  C: 1.0
+  max_iter: 1000
+  n_jobs: 2              # MEMORY, not CPU, is the limit here. joblib gives each
+                         # worker its OWN copy of the pair matrix X, which on
+                         # GvHD arm 4 is 36005 x 7168 float32 = 1.03 GB. Eight
+                         # workers asked for ~8 GB and the OS killed them
+                         # (TerminatedWorkerError). Raise this only if you know
+                         # you have RAM for n_jobs x |X|.
+  # The same sweep is also run with an XGBoost classifier at every threshold, so
+  # the plot compares L2-logistic vs XGBoost on the identical 1[W > t] targets.
+  run_xgboost: true
+  xgb_params:
+    n_estimators: 500
+    max_depth: 4
+    learning_rate: 0.05
+    subsample: 0.8
+    colsample_bytree: 0.8
+
+# --- Block 3: representation ablation -----------------------------------------
+# A 4-arm incremental ladder over the FEATURE REPRESENTATION only. The models,
+# the splits, the labels and the metrics are identical in every arm, so any
+# difference between arms is attributable to the representation and nothing else.
+# Each step flips exactly ONE factor, and the order respects the fact that
+# summation REQUIRES equal-dimension selection (equal_dim is introduced before
+# sum), so every arm is dimensionally valid.
+#
+#   transform : clr | presence_absence
+#   selection : quantile   (per-source top fraction by raw variance, the
+#                           preprocess.quantile block above)
+#               equal_dim  (keep ALL Xv procs, then the top-|Xv| Xb procs, so
+#                           both pair-halves have the same width)
+#   combine   : concat | sum        (sum requires selection == equal_dim)
+#
+# Read the comparisons as:
+#   arm2 vs arm1 -> presence/absence vs abundance
+#   arm3 vs arm2 -> equal-dim selection vs per-source quantile
+#   arm4 vs arm3 -> summation vs concatenation
+ablation:
+  enabled: true
+
+  # ANCHOR. The arm the main pipeline uses (mirror the `preprocess:` block
+  # above) and the one the family figure is drawn for. Changing this alone does
+  # NOT change what the pipeline computes — set preprocess.selection/transform/
+  # combine to match, or the ablation and the main run describe different things.
+  #
+  # SELECTED ON THE `y` CONTROL, CRC. Arm 4 has the highest mean AUC for both
+  # nonlinear models and beats arm 1 significantly when paired across the shared
+  # folds (mlp +0.044 p=0.006, xgb +0.039 p=0.007). Selection was done on `y`,
+  # never on w_class, so the W claims stay uncontaminated by the choice.
+  #
+  # Honest caveats to carry into the write-up:
+  #   * arms 2, 3 and 4 are NOT separable from each other (arm4 vs arm3
+  #     p=0.46 mlp / 0.40 xgb). The whole gain over arm 1 is already delivered
+  #     by presence/absence alone; equal_dim and sum add nothing measurable.
+  #   * equal_dim significantly HURTS sparse_logistic (-0.020 vs arm 2, p=0.003).
+  #   * on w_class the arms are indistinguishable from one another, so this
+  #     choice is irrelevant to the W result — which is the point of the ablation.
+  #   * the arm-4 gain is CRC-only: on IBD it is +0.008 (p=0.24) and on GvHD
+  #     +0.011 (p=0.14) for the MLP. Arm 4 is still the best arm for the MLP in
+  #     all three cohorts (6/6 cohort x task cells), which is the honest
+  #     justification; it is NOT uniformly best for xgb or sparse_logistic.
+  #   * the original pre-committed rule was "gap > one fold SD", which arm 4
+  #     does not clear (+0.044 vs SD 0.051). The switch rests on the paired
+  #     test, adopted after seeing the data. Report both readings.
+  anchor: 4_full_presence_sum_equaldim
+
+  # Binary tasks the ablation ray is run on. Y is included deliberately: it is
+  # the learnable positive control, so it shows the arms moving (or not) on a
+  # target that demonstrably carries signal. w_reg is excluded — the ablation is
+  # about the binary edge targets.
+  tasks:
+    - y
+    - w_class
+
+  # Model subset for the arms. The two pinned MLPs each fire on their own task
+  # only (target_task), so this resolves to three models per task:
+  # sparse_logistic, xgb_clf, and that task's MLP.
+  models:
+    - sparse_logistic
+    - xgb_clf
+    - mlp_clf_y
+    - mlp_clf_w_class
+
+  arms:
+    - name: 1_baseline_clr_concat_quantile
+      transform: clr
+      selection: quantile
+      combine: concat
+
+    - name: 2_presence_concat_quantile
+      transform: presence_absence
+      selection: quantile
+      combine: concat
+
+    - name: 3_presence_concat_equaldim
+      transform: presence_absence
+      selection: equal_dim
+      combine: concat
+
+    - name: 4_full_presence_sum_equaldim
+      transform: presence_absence
+      selection: equal_dim
+      combine: sum
+
+  # --- family / genus aggregation (runs inside ablation.py) -------------------
+  # Post-hoc ONLY: no model is retrained. Each bacterial family's member-genus
+  # predictions are collapsed (median probability, scored by AUC/AP), so this
+  # costs zero extra fits.
+  #
+  # Two guards make the result interpretable, and both matter. A median over k
+  # members lowers score variance and raises AUC whether or not information was
+  # added — on CRC, 18 of 27 family units are singletons and the largest holds
+  # 28 of 75 genera, exactly the shape averaging alone would produce.
+  #   fold_wise    aggregate WITHIN each fold, so family cells carry an SD and
+  #                are comparable to the genus cells.
+  family:
+    enabled: true
+    primary_truth: majority   # majority | any
+    # "any" goes near-degenerate for large families (prevalence 0.66 vs 0.49 at
+    # genus level on GvHD), so `majority` is the prevalence-matched default.

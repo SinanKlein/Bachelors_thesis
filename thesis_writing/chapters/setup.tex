@@ -1,0 +1,31 @@
+\subsection{Hyperparameters}
+We fit all models with the fixed hyperparameters listed in Table~\ref{tab:hyperparams}, identical
+across tasks, cohorts and ablation arms. We did no hyperparameter fine tuning during the pipeline, 
+since tuning only some arms would confound the comparison of Section~\ref{methods}.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Model hyperparameters}
+  \label{tab:hyperparams}
+  \begin{tabular}{>{\raggedright\arraybackslash}p{4.5cm} >{\raggedright\arraybackslash}p{10cm}}
+    \hline
+    Model & Setting \\
+    \hline
+    Sparse logistic (\texttt{sparse\_logistic}) & $L_1$ penalty, $C = 1.0$, \texttt{liblinear} solver \\
+    XGBoost (\texttt{xgb\_clf}, \texttt{xgb\_reg}) & 500 trees, max depth 4, learning rate 0.05, subsample and column subsample 0.8 \\
+    Ridge regression (\texttt{linreg}) & $\alpha = 1.0$ \\
+    MLP, single-task (\texttt{mlp\_clf\_y}, \texttt{mlp\_clf\_w\_class}, \texttt{mlp\_reg}, \texttt{mlp\_latent\_y}, \texttt{mlp\_latent\_w\_class}) & hidden width 64, dropout 0.3, batch size 512, learning rate $3\times10^{-4}$, weight decay $10^{-3}$, 200 epochs \\
+    MLP, joint (\texttt{mlp\_latent\_yw}) & as above, plus loss weights $\lambda_y = \lambda_w = 1.0$ \\
+    \hline
+  \end{tabular}
+\end{table}
+
+\subsection{Implementation and reproducibility}
+The full pipeline, from raw data to the figures and tables in this thesis, is implemented in code
+provided in electronic form (Section~\ref{el_app}), together with the package versions and
+installation instructions needed to run it.
+
+Every stage runs under a fixed random seed, so that the ten folds, model initialisations and any
+random subsampling are identical across repeated runs of the same configuration. This fixes the
+stochastic parts of the pipeline but does not guarantee bit-identical results across different
+hardware or library versions.

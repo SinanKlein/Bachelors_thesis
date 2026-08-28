@@ -1,0 +1,47 @@
+# ---- data and results: too large for git, archived separately -------------
+datas_final/
+results_modularPipe/
+multimodal_network/
+*.npz
+*.rds
+
+# ---- LaTeX build products -------------------------------------------------
+thesis_writing/thesis.pdf
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.bbl
+*.blg
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+
+# ---- Python ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+
+# ---- R --------------------------------------------------------------------
+.Rhistory
+.RData
+.Rproj.user/
+
+# ---- misc archives and OS junk -------------------------------------------
+scripts_modularPipe.zip
+# third-party paper, do not redistribute
+nbt.3988.pdf
+
+# large binaries / archives
+thesis_writing.zip
+Presentation_multimodal_networks.pptx
+__MACOSX/
+_to_delete/
+.DS_Store
+Thumbs.db

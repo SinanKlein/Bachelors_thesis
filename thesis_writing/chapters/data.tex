@@ -1,0 +1,256 @@
+
+\subsection{Cohorts}
+The data come from three published studies of the human gut microbiome, covering colorectal cancer (CRC)
+\citep{wirbel2019}, inflammatory bowel disease (IBD) \citep{lloydprice2019} and graft-versus-host disease
+(GvHD) \citep{peled2020}. The clinical endpoints of the studies do not play a role in this thesis. The contributions
+of the studies are a set of bacterial genera, a set of viral operational taxonomic units (vOTUs), and the
+abundance and protein-cluster profiles of both, so that a cohort enters the analysis as the grid of candidate
+phage--bacteria pairs summarised in Table~\ref{tab:cohorts}.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Cohorts and units of analysis}
+  \label{tab:cohorts}
+  \begin{tabular}{lrrr}
+    \hline
+                       &    CRC &    IBD &   GvHD \\
+    \hline
+    Samples            &     84 &    148 &     90 \\
+    Bacterial genera   &     75 &     94 &     95 \\
+    vOTUs              &    186 &    293 &    379 \\
+    Candidate pairs    & 13,950 & 27,542 & 36,005 \\
+    \hline
+  \end{tabular}
+\end{table}
+
+We applied the same analysis to three different cohorts rather than one, because a result obtained in a single cohort
+cannot be separated from the properties of that cohort. Repeating the same analysis in three datasets collected by
+different groups and in different populations turns a finding that holds in all three into a statement about the
+signal rather than about one dataset.
+
+The cohorts do not share the same feature vocabulary. The protein clusters are derived within each cohort
+separately, so a model fitted in one cohort reads columns that do not exist in another and cannot be transferred
+to it. Every model in this thesis is therefore trained and evaluated inside a single
+cohort, and the comparison between cohorts is a comparison of findings and not of transferred predictions.
+
+\subsection{Protein-cluster representation}
+\label{data:procs}
+Both bacteria and viruses are described in the same way without any annotation database. The proteins predicted from
+all genomes of a cohort are clustered \emph{de novo} with MMseqs2 \citep{steinegger2017}, and a genus or vOTU
+is then a profile over those clusters. Nothing about the function of a cluster enters the representation, and
+because clustering is repeated per cohort, the three cohorts share no feature vocabulary.
+
+Bacteria and virus protein features exhibit different sizes. For example, in the CRC cohort, the bacterial genomes 
+yield 70{,}625 clusters, a median of 3{,}765 per genus, whereas the viral genomes yield 2{,}756 clusters,
+a median of 30 per vOTU.
+Selection therefore keeps every viral cluster and cuts the bacterial matrix to the same width by variance, discarding 
+90 to 96 per cent of it (Table~\ref{tab:proc-counts}, Figures~\ref{fig:app-featcounts} and~\ref{fig:app-featactivity}).
+We score variance on raw counts so that the selection is independent of the transform applied afterwards; which transform, and whether the halves are concatenated or summed, is taken up in Section~\ref{sec:features}.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Protein clusters before and after the variance filter}
+  \label{tab:proc-counts}
+  \begin{tabular}{lrrr}
+    \hline
+                        & CRC    & IBD    & GvHD   \\
+    \hline
+    Bacterial clusters  & 70,625 & 78,517 & 72,646 \\
+    \quad kept          &  2,756 &  4,226 &  7,168 \\
+    Viral clusters      &  2,756 &  4,226 &  7,168 \\
+    \quad kept          &    all &    all &    all \\
+    \hline
+    Pair vector         &  2,756 &  4,226 &  7,168 \\
+    \hline
+  \end{tabular}
+\end{table}
+
+\subsection{Constructing the bipartite grid}
+The rows of the grid are bacterial genera and the columns are viral operational taxonomic units, indexed by
+$i$ and $j$ respectively. Because a genus or a vOTU without features cannot be passed to the model, we only take
+genera and vOTUs that appear in the CRISPR table and also carry a protein-cluster profile \citep{steinegger2017}.
+The grid is then the full Cartesian product of the two surviving
+sets, so that every genus is paired with every vOTU and the unit of analysis is the pair rather than the
+organism. This is what produces the pair counts in Table~\ref{tab:cohorts}. In IBD we dropped one
+genus since it had no protein-cluster profile, whereas all genera were kept in the other two cohorts.
+
+We place the CRISPR target on the grid directly as it is indexed by the same genera and vOTUs. It is used in
+binary form, so that $Y_{ij} = 1$ if at least one spacer of genus $i$ matches vOTU $j$
+\citep{zhang2021spacepharer} and $Y_{ij} = 0$ otherwise; the number of matching spacers is discarded.
+
+The glasso matrix is estimated separately from the abundance data \citep{friedman2008,liu2010}, from $B = 50$
+subsamples at an instability threshold of $\beta = 0.2$; a sparser network at $\beta = 0.1$ was also available and is
+not used here. It is estimated on its own set of entities, with its own naming convention, meaning it does not
+necessarily align to the grid in its raw form. We normalise the names on both sides before any matching, by
+lowercasing, removing every character that is not a letter or a digit, and then reindex $W$ onto the grid. We then
+fill the cells that have no genus or vOTU counterparts in the glasso matrix with zero, and record a second matrix of
+the same shape marking which cells were matched. That matrix is the observation mask.
+
+The glasso matrix is continuous. $W_{ij} \in [0,1]$ is the fraction of subsamples in which the edge between
+genus $i$ and vOTU $j$ was selected, so it is a selection frequency rather than a binary statement about the
+pair. During the pipeline, we use it in two forms. In the regression task we keep the value itself, and in the
+classification task we threshold it at zero, so that the label is $1$ if $W_{ij} > 0$ and $0$ otherwise. Together
+with the CRISPR target this gives the three prediction targets used throughout this thesis, referred to
+as $y$, $w_{\text{reg}}$ and $w_{\text{class}}$.
+
+\subsection{The observation mask}
+The glasso matrix does not cover the whole grid. It is estimated on the entities that survive the prevalence
+filter of the abundance data, which means it is not the same set as the entities that carry both a CRISPR entry and a
+protein-cluster profile. Thus, only some of the genera and only some of the vOTUs of the grid have a counterpart in
+$W$. We record this in a binary matrix $M$ of the same shape as the grid, with
+$M_{ij} = 1$ if genus $i$ and vOTU $j$ were both matched and $M_{ij} = 0$ if not. A cell is matched exactly when its
+row and its column are both matched, so $M$ is the outer product of the two indicator vectors and the observed
+cells form a block rather than a scattered pattern. In CRC, 62 genera
+and 93 vOTUs are matched, which gives $62 \times 93 = 5{,}766$ observed pairs, or 41\% of the grid.
+The corresponding figures are $75 \times 70 = 5{,}250$ pairs (19\%) in IBD and $56 \times 344 = 19{,}264$
+pairs (54\%) in GvHD.
+
+Even though the unmatched cells are stored as zero on the grid, that zero is not a statement about the pair. Treating
+it as an observed absence would teach the model that unmatched $W$ edges mean absence. In reality the cell is
+unobserved, so it is not known from the data if the interaction was absent or present. We therefore exclude those
+cells entirely from the pipeline.
+
+Because $Y$ is defined on the whole grid, the intersection between the $Y$-observed and the $W$-observed set is the
+$W$-observed set itself, and this single mask places all three tasks on the same pairs. The whole pipeline is applied
+to an identical set of pairs, meaning a difference between the $Y$ task models, $W$ task models and joint models is a
+difference between the targets and not between the data they were shown.
+
+The cost is that $Y$ is no longer evaluated on the full grid. In CRC, 5,766 of the 13,950 pairs remain and the
+CRISPR prevalence rises slightly from 3.1\% to 3.4\%, so the $Y$ results describe the masked subset and not
+the complete genus $\times$ vOTU grid.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[b]{0.32\textwidth}
+    \centering\includegraphics[width=\textwidth]{figures/fig_wobs_crc.png}\caption{CRC}
+  \end{subfigure}\hfill
+  \begin{subfigure}[b]{0.32\textwidth}
+    \centering\includegraphics[width=\textwidth]{figures/fig_wobs_gvhd.png}\caption{GvHD}
+  \end{subfigure}\hfill
+  \begin{subfigure}[b]{0.32\textwidth}
+    \centering\includegraphics[width=\textwidth]{figures/fig_wobs_ibd.png}\caption{IBD}
+  \end{subfigure}
+  \caption{Glasso matrix on the observed block only, by cohort. Every cell carries a real $W$ value, so
+  no unobserved region remains; $n$ is the number of bacterial genera and $m$ the number of vOTUs.}
+  \label{fig:wobs}
+\end{figure}
+\FloatBarrier
+
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[b]{0.32\textwidth}
+    \centering\includegraphics[width=\textwidth]{figures/fig_yobs_crc.png}\caption{CRC}
+  \end{subfigure}\hfill
+  \begin{subfigure}[b]{0.32\textwidth}
+    \centering\includegraphics[width=\textwidth]{figures/fig_yobs_gvhd.png}\caption{GvHD}
+  \end{subfigure}\hfill
+  \begin{subfigure}[b]{0.32\textwidth}
+    \centering\includegraphics[width=\textwidth]{figures/fig_yobs_ibd.png}\caption{IBD}
+  \end{subfigure}
+  \caption{CRISPR matrix on the observed block only, by cohort, on the same pair set as
+  Figure~\ref{fig:wobs}; $n$ is the number of bacterial genera and $m$ the number of vOTUs.}
+  \label{fig:yobs}
+\end{figure}
+\FloatBarrier
+
+\subsection{Descriptive statistics} Unless stated otherwise, the numbers in this subsection refer to the masked set,
+since that is the set every model is trained and evaluated on. Table~\ref{tab:descriptives} collects them. The two
+tasks differ greatly in terms of their positive classes. CRISPR linkage marks between 2\% and 4\% of the observed
+pairs, while a glasso edge is present in roughly two out of five, which means a model faces a strong imbalance on $Y$
+and a nearly balanced one on $W$. The class balance on the $W$ task is a consequence of the thresholding rather than a
+property of the network. $W$ is a selection frequency, so $W > 0$ admits every pair that was selected in at least one
+of the fifty subsamples, whereas the glasso network at the selected penalty has a bacteria--virus density of only 2\%
+to 4\% across the three cohorts.
+
+\begin{table}[htbp]
+  \centering
+  \caption{The masked set, by cohort}
+  \label{tab:descriptives}
+  \begin{tabular}{lrrr}
+    \hline
+                              &    CRC &    IBD &   GvHD \\
+    \hline
+    Observed pairs            &  5,766 &  5,250 & 19,264 \\
+    CRISPR positive           & 198 (3.4\%) & 182 (3.5\%) & 478 (2.5\%) \\
+    Glasso edge ($W > 0$)     & 2,473 (42.9\%) & 2,019 (38.5\%) & 9,451 (49.1\%) \\
+    Mean $W$                  &  0.083 &  0.097 &  0.101 \\
+    Both                      &     84 &     92 &    265 \\
+    \hline
+  \end{tabular}
+\end{table}
+
+The two targets also overlap far less than their prevalences alone would suggest. If CRISPR linkage and a
+glasso edge were independent of each other, the expected number of pairs carrying both would be
+%
+\begin{equation}
+  \label{eq:expected-overlap}
+  \mathbb{E}[\,\text{both}\,] = \frac{n_Y \, n_W}{n_{\text{obs}}} ,
+\end{equation}
+%
+with $n_Y$ and $n_W$ the number of positives of each target and $n_{\text{obs}}$ the number of observed pairs.
+In CRC this gives $198 \times 2{,}473 / 5{,}766 = 85$, against the 84 pairs that actually carry both. The
+corresponding figures are 92 observed against 70 expected in IBD and 265 against 235 in GvHD. The two signals are
+therefore close to independent in all three cohorts, and only mildly enriched in two of them.
+% ---------------------------------------------------------------------------
+% NOTE: \citep{shang2025} reports that CRISPR and prophage evidence agree on
+% only 35 interactions at species level -- a different proxy pair, the same
+% phenomenon. Worth one clause here ("consistent with the weak agreement
+% reported between other pairs of interaction proxies") so the reader meets the
+% finding as an instance of a pattern rather than as a quirk of these cohorts.
+% The full discussion of what it means belongs in Section~\ref{discussion}.
+% ---------------------------------------------------------------------------
+As can be seen in
+Figure~\ref{fig:combined}, the CRISPR cells and the glasso cells occupy the grid almost without meeting.
+
+The glasso values themselves are concentrated near zero. In the CRC cohort, $W$ has a mean of 0.083 and a
+standard deviation of 0.182, 57\% of the observed cells are exactly zero and only 5\% exceed 0.5
+(Figure~\ref{fig:wdist}), and the other two cohorts behave the same way. A regression on the continuous $W$
+therefore faces a heavily zero-inflated target. For this reason we also treat the thresholded
+version as a separate binary task.
+
+The CRISPR network is concentrated on a small number of bacteria. Its structure is described here on the full grid
+rather than on the mask, since the mask block truncates the most connected genera. The median genus carries two or
+three spacer matches, while the most connected genus carries 54 in CRC, 124 in IBD and 156 in GvHD. Also, in every
+cohort the ten most connected genera account for about 60\% of all CRISPR edges. On the other side, the viruses are
+far more even, with a median of two matches per vOTU and a maximum between 8 and 12. Therefore, the bipartite network
+is highly asymmetric: a few bacteria are linked to many phages, but hardly any phage is linked to many
+bacteria (Figure~\ref{fig:app-ymatrix}).
+
+Finally, both feature matrices are sparse, and the size asymmetry reported in Section~\ref{data:procs} is
+measured there over all profiled entities rather than over the masked pairs
+(Figures~\ref{fig:app-featcounts} and~\ref{fig:app-featactivity}).
+
+How these features are selected, transformed and combined into a representation of a pair is described in
+Section~\ref{methods}.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[b]{0.32\textwidth}
+    \centering\includegraphics[width=\textwidth]{figures/fig_combined_crc.png}\caption{CRC}
+  \end{subfigure}\hfill
+  \begin{subfigure}[b]{0.32\textwidth}
+    \centering\includegraphics[width=\textwidth]{figures/fig_combined_gvhd.png}\caption{GvHD}
+  \end{subfigure}\hfill
+  \begin{subfigure}[b]{0.32\textwidth}
+    \centering\includegraphics[width=\textwidth]{figures/fig_combined_ibd.png}\caption{IBD}
+  \end{subfigure}
+  \caption{CRISPR and glasso edges on the grid, by cohort: CRISPR only (red), glasso only (blue), both (purple), unobserved (background)}
+  \label{fig:combined}
+\end{figure}
+\FloatBarrier
+
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[b]{0.32\textwidth}
+    \centering\includegraphics[width=\textwidth]{figures/fig_wdist_crc.png}\caption{CRC}
+  \end{subfigure}\hfill
+  \begin{subfigure}[b]{0.32\textwidth}
+    \centering\includegraphics[width=\textwidth]{figures/fig_wdist_gvhd.png}\caption{GvHD}
+  \end{subfigure}\hfill
+  \begin{subfigure}[b]{0.32\textwidth}
+    \centering\includegraphics[width=\textwidth]{figures/fig_wdist_ibd.png}\caption{IBD}
+  \end{subfigure}
+  \caption{Glasso edge probability on the observed cells, by cohort}
+  \label{fig:wdist}
+\end{figure}
+\FloatBarrier

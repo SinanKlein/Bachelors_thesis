@@ -1,0 +1,38 @@
+\subsection{Interpretation}
+\label{disc:interpretation}
+The weak signal on the $W$ task barely responds to any of the remedies tried: added capacity helps
+inconsistently (Section~\ref{res:main-wclass}), no arm improves $w_{\text{class}}$ in any cohort
+(Section~\ref{res:ablation}), no interior cut of $W$ exceeds 0.62 AUC (Figure~\ref{fig:wthreshold}), and
+family-level aggregation does not help (Section~\ref{res:taxres}). This could be because of a structural
+mismatch. $Y_{ij}$ records a physical event between two genomes and is for that reason a property of the pair
+alone, so the biology that defines it also makes it representable from $x_i$ and $x_j$. $W_{ij}$ has no such
+definition: it is an entry of a regularised precision matrix and depends on every other organism in the
+community, so no function of $x_i$ and $x_j$ represents it exactly. This is a conjecture rather than a tested
+claim, and the consistent above-chance signal makes it a bound rather than a barrier. A second alternative is
+that $W$ does not measure interaction at all, supported by the targets overlapping little more than independence
+predicts (Section~\ref{data}) and by abundance correlations recovering known infection networks at close to
+chance level \citep{coenen2018}, a limitation reported for microbial association networks more generally
+\citep{pinto2022}.
+
+\subsection{Limitations and future work}
+\label{disc:limitations}
+Four limitations bound these results. The folds are drawn over pairs rather than organisms
+(Section~\ref{sec:eval}), so every genus and vOTU appears in training and only the combination is new at test
+time; what is measured is the prediction of unobserved pairings among known organisms, not host prediction for
+an unseen phage. CRISPR linkage is a lower bound on interaction, since a missing spacer does not establish
+that no infection occurred \citep{zhang2021spacepharer}, so the negative class is unreliable. Predictions are
+made at genus and vOTU level, while host range is frequently strain-specific. And every model uses one fixed
+hyperparameter setting (Section~\ref{setup}), chosen to keep the arms comparable rather than to maximise
+performance.
+
+Two directions follow from the representation. Existing approaches build their features from curated resources
+\citep{edwards2016,coutinho2021,roux2023,nie2024}, whereas the one used here is annotation-free. If a
+biological prior is what separates the two targets, then for $W$ the place to supply it is the features, since
+the target itself cannot be redefined: selecting protein clusters by biological role, such as receptor
+binding, adhesion or defence, would aim the model at the component of $W$ that a genuine infection would
+produce rather than at whatever varies most. A protein language model such as ESM-2 \citep{lin2023} would
+supply the same prior in transferred form, and its embeddings are shared across cohorts, which would in
+addition remove the vocabulary barrier that currently prevents training in one cohort and evaluating in
+another (Section~\ref{data}). How far either can go on $W$ is bounded by the mismatch of
+Section~\ref{disc:interpretation}, since the part of $W_{ij}$ that depends on the rest of the community
+remains beyond the reach of any pairwise representation.
