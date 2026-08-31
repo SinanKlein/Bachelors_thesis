@@ -1,5 +1,11 @@
 """
-ablation.py — the whole representation ablation
+ablation.py — the whole representation ablation, in one script.
+
+Self-contained: it loads graph_data.npz, runs every arm x task x model x fold
+in memory, does the family/genus aggregation on the predictions it just made,
+and writes tidy long CSVs. No subprocesses, no per-arm folders, no intermediate
+npz files. The main pipeline (preprocess.py / experiment.py) is untouched and
+knows nothing about arms.
 
 WHAT THE ABLATION IS
 A 4-arm ladder over the FEATURE REPRESENTATION only. Models, folds, labels and
@@ -7,10 +13,10 @@ metrics are identical in every arm, so any arm-to-arm difference is attributable
 to the representation and nothing else. Each step flips exactly one factor, and
 the order respects that summation REQUIRES equal-dimension selection:
 
-  arm 1  clr              + quantile  + concat     
-  arm 2  presence/absence + quantile  + concat     
-  arm 3  presence/absence + equal_dim + concat     
-  arm 4  presence/absence + equal_dim + sum        
+  arm 1  clr              + quantile  + concat     (the anchor)
+  arm 2  presence/absence + quantile  + concat     -> presence vs abundance
+  arm 3  presence/absence + equal_dim + concat     -> selection scheme
+  arm 4  presence/absence + equal_dim + sum        -> sum vs concat
 
 Run on BOTH binary tasks: w_class (the target of interest) and y (the learnable
 positive control, which shows whether the arms move at all when signal exists).
@@ -27,6 +33,9 @@ OUTPUTS  (all under <run>/ablation/)
   ablation_predictions.csv.gz per-pair test predictions
   family_metrics.csv          genus vs family
   ablation_log.json           config echo, timings, family map stats
+
+Plots are drawn separately by plot_analyses.R, so they match the rest of the
+thesis figures.
 
 Usage:
   python ablation.py --config default.yaml --run-id <run_id>
@@ -62,7 +71,10 @@ from models import build_model
 # edge threshold, which is 0 everywhere (tasks[].binarize_threshold).
 MAJORITY = 0.5
 
-# 1. Features: the three switches that define an arm
+
+# =============================================================================
+# 1. Features — the three switches that define an arm
+# =============================================================================
 def build_arm_features(data: dict, pcfg: dict, arm: dict) -> tuple[np.ndarray, dict]:
     """Pair feature matrix for one arm, via the shared features.py helpers."""
     arrays, _ = select_and_transform(data, pcfg, arm["selection"], arm["transform"],
@@ -74,7 +86,10 @@ def build_arm_features(data: dict, pcfg: dict, arm: dict) -> tuple[np.ndarray, d
             "feature_dim": int(X.shape[1])}
     return X.astype(np.float32), info
 
+
+# =============================================================================
 # 2. Family / genus
+# =============================================================================
 def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]", "", str(s).lower())
 
@@ -138,6 +153,10 @@ def aggregate_once(prob: np.ndarray, y: np.ndarray, bact_of_pair: np.ndarray,
 
 def _binary_metrics(y, score):
     """AUC and AP for one aggregation level, plus the unit count and prevalence.
+
+    The hard majority-vote call this used to take was dropped with the
+    precision / recall / F1 columns: AUC and AP are ranking metrics and need no
+    probability cutoff, which is the whole reason they survived the cull.
     """
     out = {"n": int(len(y)), "prevalence": float(np.mean(y))}
     if len(np.unique(y)) >= 2:
@@ -198,7 +217,10 @@ def run_family(preds: pd.DataFrame, bact_of_pair, virus_of_pair, n_virus,
                   f"family={fam_auc:.3f} lift={fam_auc - gen_auc:+.3f}")
     return pd.DataFrame(rows)
 
+
+# =============================================================================
 # 3. The arm x task x model x fold loop
+# =============================================================================
 def _run_arm(arm, X, tasks, models, task_data, splits, folds, seed,
              state, t0) -> None:
     """Fit every (task, model, fold) cell for ONE arm, appending into `state`.
@@ -254,7 +276,10 @@ def _fit_cell(arm, task, model_cfg, fold, X, y_all, mask_all, splits, seed):
                               y_true=y_all[ev], prob=prob))
     return met, preds, time.time() - tick, len(tr), len(ev)
 
+
+# =============================================================================
 # 4. Main
+# =============================================================================
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True, type=Path)
@@ -300,7 +325,7 @@ def main() -> None:
     print(f"[ablation] tasks  : {[t['name'] for t in tasks]}")
     print(f"[ablation] models : {[m['name'] for m in models]}")
 
-    # data + labels (label logic imported from preprocess.py) 
+    # ---- data + labels (label logic imported from preprocess.py) -----------
     data = flatten_pair_labels(load_graph_data(GRAPH_DATA_FILE))
     n_bact, n_virus = np.asarray(data["W_adjacency"]).shape
     bact_of_pair = np.asarray(data["bact_idx"]).ravel().astype(int)
@@ -317,6 +342,7 @@ def main() -> None:
               f"{y[obs].mean():.4f}")
 
     # ONE split set, stratified on the first binary task, shared by every arm
+    # and every task — identical folds are what make the arms comparable.
     strat = tasks[0]["name"]
     splits = make_splits_dataframe(task_data[strat][0],
                                    n_outer=int(cfg["resampling"]["n_outer"]),
@@ -326,6 +352,7 @@ def main() -> None:
     folds = sorted(splits["outer_fold"].unique())
     print(f"[ablation] {len(folds)} shared folds, stratified on '{strat}'")
 
+    # ---- the loop ----------------------------------------------------------
     state = {"met_rows": [], "pred_frames": [], "arm_info": {}, "n_fits": 0}
     t0 = time.time()
 
@@ -353,7 +380,7 @@ def main() -> None:
     print(f"\n[ablation] wrote ablation_metrics.csv ({len(metrics)} rows) and "
           f"ablation_predictions.csv.gz ({len(preds)} rows)")
 
-    # family / genus
+    # ---- family / genus ----------------------------------------------------
     fam_stats = {}
     fcfg = acfg.get("family", {}) or {}
     if not args.skip_family and bool(fcfg.get("enabled", True)):
@@ -367,7 +394,7 @@ def main() -> None:
             write_csv(fam, out_dir / "family_metrics.csv")
             print(f"[family] wrote family_metrics.csv ({len(fam)} rows)")
 
-    # summary
+    # ---- summary -----------------------------------------------------------
     test = metrics[metrics.role == "test"]
     summ = (test.groupby(["task", "arm", "model"], as_index=False)
             .agg(auc_mean=("auc", "mean"), auc_sd=("auc", "std"),

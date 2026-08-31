@@ -34,7 +34,9 @@ sys.path.insert(0, str(HERE))
 from paths import RESULTS_DIR, R_DIR, GRAPH_DATA_FILE, DATASET_NAME
 from utils import make_run_id
 
+# ---------------------------------------------------------------------------
 # CONFIGURE
+# ---------------------------------------------------------------------------
 CONFIG_PATH = HERE / "default.yaml"
 
 # Path to Rscript on this machine. A wrong path skips the R plots with a warning.
@@ -44,13 +46,16 @@ R_EXECUTABLE = r"C:/PROGRA~1/R/R-45~1.1/bin/x64/Rscript.exe"
 REBUILD_GRAPH_DATA = True    # rebuild graph_data.npz (fast; safe to leave on)
 RUN_ANALYSES       = True    # analyses.py   W-threshold sweep
 RUN_ABLATION       = True    # ablation.py   4 arms + family/genus
-RUN_SHUFFLE_PROBE  = True    # shuffle_probe.py  ON: ~60 extra model fits (hours on GvHD)
+RUN_SHUFFLE_PROBE  = False   # shuffle_probe.py  OFF: ~60 extra model fits (hours on GvHD)
 RUN_LATENT         = True    # latent.py     latent export (needs torch)
 RUN_GRAPH_EXPORT   = True    # graph_export.py  adjacency CSVs for the R plots
 RUN_DESCRIPTIVES   = True    # descriptives.py  the Data chapter's numbers
 RUN_R_PLOTS        = True    # every plot_*.R
 
+
+# ---------------------------------------------------------------------------
 # Helpers
+# ---------------------------------------------------------------------------
 def section(msg: str) -> None:
     print("\n" + "=" * 70)
     print(f"  {msg}")
@@ -74,7 +79,10 @@ def try_run(label: str, cmd: list[str], cwd: Path | None = None) -> bool:
         print(f"[warn] {label} failed ({e}); continuing.")
         return False
 
+
+# ---------------------------------------------------------------------------
 # Main
+# ---------------------------------------------------------------------------
 def main() -> None:
     if not CONFIG_PATH.exists():
         raise FileNotFoundError(
@@ -88,7 +96,7 @@ def main() -> None:
     t_start = time.time()
     section(f"PIPELINE START | dataset = {DATASET_NAME} | run_id = {run_id}")
 
-    # 1. data 
+    # -- 1. data ------------------------------------------------------------
     if REBUILD_GRAPH_DATA or not GRAPH_DATA_FILE.exists():
         section("1/10  build_graph_data.py")
         run([py, str(HERE / "build_graph_data.py")])
@@ -96,14 +104,14 @@ def main() -> None:
         section("1/10  build_graph_data.py — SKIPPED (already exists)")
         print(f"[info] using existing {GRAPH_DATA_FILE}")
 
-    # 2 + 3. the experiment 
+    # -- 2 + 3. the experiment ----------------------------------------------
     section("2/10  preprocess.py")
     run([py, str(HERE / "preprocess.py")] + cfg_args)
 
     section("3/10  experiment.py")
     run([py, str(HERE / "experiment.py")] + cfg_args)
 
-    #  4 + 5. analyses of the experiment 
+    # -- 4 + 5. analyses of the experiment ----------------------------------
     if RUN_ANALYSES:
         section("4/10  analyses.py  (W-threshold sweep)")
         try_run("analyses", [py, str(HERE / "analyses.py")] + cfg_args)
@@ -112,7 +120,7 @@ def main() -> None:
         section("5/10  ablation.py  (4 arms + family/genus)")
         try_run("ablation", [py, str(HERE / "ablation.py")] + cfg_args)
 
-    #  6. shuffled-Y control 
+    # -- 6. shuffled-Y control ----------------------------------------------
     # Off by default: n_folds x (1 + n_shuffles) full fits on top of everything
     # else. Reads this run's own splits and features, so it can equally be run
     # on its own afterwards with the same --run-id.
@@ -123,24 +131,24 @@ def main() -> None:
         print("[info] shuffle probe skipped (RUN_SHUFFLE_PROBE=False). Run it later with:")
         print(f'         "{sys.executable}" shuffle_probe.py --config "{CONFIG_PATH}" --run-id {run_id}')
 
-    #  7. latent spaces 
+    # -- 7. latent spaces ----------------------------------------------------
     if RUN_LATENT:
         section("7/10  latent.py  (out-of-fold latent export)")
         run([py, str(HERE / "latent.py")] + cfg_args)
     else:
         print("[info] latent stage skipped (RUN_LATENT=False).")
 
-    #  8. graph views 
+    # -- 8. graph views ------------------------------------------------------
     if RUN_GRAPH_EXPORT:
         section("8/10  graph_export.py  (adjacency CSVs)")
         try_run("graph export", [py, str(HERE / "graph_export.py")] + cfg_args)
 
-    #  9. descriptive statistics 
+    # -- 9. descriptive statistics -------------------------------------------
     if RUN_DESCRIPTIVES:
         section("9/10  descriptives.py  (the Data chapter's numbers)")
         try_run("descriptives", [py, str(HERE / "descriptives.py")] + cfg_args)
 
-    #  10. plots 
+    # -- 10. plots -----------------------------------------------------------
     if RUN_R_PLOTS:
         section("10/10  R plots")
         # Three scripts, one per stage of the pipeline they visualise.
@@ -168,7 +176,7 @@ def main() -> None:
     else:
         print("[info] R plots skipped (RUN_R_PLOTS=False).")
 
-    # summary 
+    # -- summary -------------------------------------------------------------
     out_dir = RESULTS_DIR / DATASET_NAME / run_id
     elapsed = time.time() - t_start
     section("DONE")

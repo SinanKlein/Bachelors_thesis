@@ -36,7 +36,7 @@ from paths import preprocessing_dir, predictions_dir, metrics_dir
 from utils import (
     load_config, load_npz, write_csv, write_json,
     basic_metrics, cutoff_sweep, regression_metrics,
-    set_global_seeds, derive_fold_seed, env_stamp,
+    set_global_seeds, derive_fold_seed,
 )
 from features import pair_matrix_from_filtered
 from models import build_model
@@ -52,7 +52,10 @@ warnings.filterwarnings(
     message=".*Inconsistent values: penalty.*",
 )
 
+
+# ---------------------------------------------------------------------------
 # Progress / IO helpers
+# ---------------------------------------------------------------------------
 def _p(msg: str) -> None:
     """Print immediately (flush) so progress is visible during long runs,
     even when output is piped to a file (e.g. `python experiment.py ... | tee log.txt`)."""
@@ -76,7 +79,10 @@ def _write_or_append(new_df: pd.DataFrame, path, models_run, append: bool) -> No
            f"(kept {len(old)} prior rows, added {len(new_df) - len(old)})")
     write_csv(new_df, path)
 
+
+# ---------------------------------------------------------------------------
 # Per-fold fit + predict, dispatched by task type
+# ---------------------------------------------------------------------------
 def _predict_one(model, ttype: str, X) -> np.ndarray:
     """Dispatch a single prediction call by task_type."""
     if ttype == "binary":
@@ -86,8 +92,11 @@ def _predict_one(model, ttype: str, X) -> np.ndarray:
     else:
         raise ValueError(f"Unknown task_type: {ttype}")
 
+
+# ---------------------------------------------------------------------------
 # Target transforms (regression only). Fit in transformed space, score on the
 # original scale. `logit` clips to [eps, 1-eps] first so 0/1 don't blow up.
+# ---------------------------------------------------------------------------
 def target_forward(y: np.ndarray, kind: str, eps: float) -> np.ndarray:
     """Map the raw target into the space the model is trained in."""
     if kind in (None, "none"):
@@ -140,7 +149,13 @@ def fit_predict_joint_yw(model_cfg: dict, X_tr, y_tr, w_tr, X_ev,
     info_trace = model.get_info_trace() if hasattr(model, "get_info_trace") else []
     return pred_ev, info_trace
 
+
+# ---------------------------------------------------------------------------
 # The 10-split train/test experiment
+# ---------------------------------------------------------------------------
+# run_main_experiment() is deliberately thin: it assembles the per-run context,
+# walks the folds, and delegates. Each helper below owns exactly one concern and
+# appends to the shared `acc` accumulator, so no state is hidden in a closure.
 @dataclass
 class ExperimentContext:
     """Everything the per-fold helpers need, assembled once per run."""
@@ -342,7 +357,6 @@ def _write_outputs(cfg, args, acc, base_seed, pred_dir, met_dir, t0) -> None:
     write_json({
         "run_id":        args.run_id,
         "base_seed":     base_seed,
-        "env":           env_stamp(),
         "n_predictions": int(len(preds)),
         "n_metrics":     int(len(metrics)),
         "n_cutoff_rows": int(n_cut),
@@ -417,7 +431,10 @@ def run_main_experiment(cfg: dict, args, data, labels_df, splits_df, X, base_see
     _write_outputs(cfg, args, acc, base_seed,
                    predictions_dir(args.run_id), metrics_dir(args.run_id), ctx.t0)
 
+
+# ---------------------------------------------------------------------------
 # Main
+# ---------------------------------------------------------------------------
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True, type=Path)
@@ -461,7 +478,7 @@ def main() -> None:
     base_seed = int(cfg.get("resampling", {}).get("seed", 42))
     set_global_seeds(base_seed)
 
-    #  load stage 1 outputs (shared by all blocks) 
+    # ---- load stage 1 outputs (shared by all blocks) ----------------------
     print(f"[experiment] loading preprocessing outputs from {pre_dir}")
     data      = load_npz(pre_dir / "data_filtered.npz")
     labels_df = pd.read_csv(pre_dir / "labels.csv")

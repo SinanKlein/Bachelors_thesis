@@ -6,6 +6,16 @@ its trunk is taken as the pair's latent vector. Latents are produced
 OUT-OF-FOLD — every pair is encoded by a model that never saw it in training.
 The forward path used for prediction is untouched; this only taps it.
 
+NOTE ON DECODABILITY. There is deliberately no linear-probe step here. Because
+each fold trains its own network from its own initialisation, the 64 hidden
+units are not aligned across folds, so a probe fitted on latents pooled from
+several encoders reads inconsistent columns and understates decodability. The
+claim it would have supported is available for free from the architecture: the
+network's output layer IS a linear map on this latent, and it reaches the AUC
+reported in metrics/metrics_by_fold.csv. The same non-alignment rules out any
+analysis that pools latents across folds, so this stage stops at the export: the
+raw out-of-fold mu_* vectors, and nothing derived from them.
+
 Three spaces, each pinned to its own task:
   mlp_latent_y        trained on Y
   mlp_latent_w_class  trained on w_class
@@ -32,7 +42,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from paths import preprocessing_dir, run_dir
 from utils import (load_config, load_npz, write_json,
-                   set_global_seeds, derive_fold_seed)
+                   set_global_seeds)
 from features import pair_matrix_from_filtered
 from experiment import target_forward, target_inverse
 from models import build_model
@@ -195,11 +205,8 @@ def _export_one(cfg, run_id, model_name, out_dir, data, labels_df, X, splits, ba
         te_rows = np.array([s for s in te_ids if int(s) in sid_to_pos], dtype=int)
         if len(tr_rows) == 0 or len(te_rows) == 0:
             continue
-        # Same seed derivation as experiment.py, so the refit here reproduces
-        # the network whose metrics are reported in metrics_by_fold.csv.
         model = _fit_model_on_train(model_cfg, X, tr_rows, y_all, w_all, w_cls_all,
-                                    w_transform, logit_eps,
-                                    derive_fold_seed(base_seed, int(outer_fold), -1))
+                                    w_transform, logit_eps, base_seed + int(outer_fold))
         z_te, _lv_te = _encode_latent(model, X[te_rows], batch_size=batch_size)
         yp_te, wp_te = _predict_for_export(model, model_cfg, X[te_rows], w_transform, logit_eps)
         if z is None:
@@ -296,7 +303,9 @@ def run_export(cfg: dict, run_id: str, model_names: list[str],
                     splits, base_seed, force)
     _p("[latent] export DONE")
 
+# ---------------------------------------------------------------------------
 # Main
+# ---------------------------------------------------------------------------
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True, type=Path)

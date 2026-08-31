@@ -318,7 +318,7 @@ local({
         caption = sprintf("run = %s", run_id)
       )
     ggsave(file.path(out, "08_W_distribution.png"), p8,
-           width = 5.0, height = 3.2)
+           width = 6.5, height = 4)
   }
 
   # 9. Stratification sanity — positive fraction per outer fold
@@ -444,7 +444,7 @@ local({
     labs(title = sprintf("CRISPR interaction matrix  (edges = %d, density = %.2f%%)",
                          n_edge, dens),
          x = "viruses", y = "bacteria")
-  ggsave(file.path(out, "interaction_Y_matrix.png"), pY, width = 5.4, height = 4.4, dpi = 150)
+  ggsave(file.path(out, "interaction_Y_matrix.png"), pY, width = 7.5, height = 6, dpi = 150)
   message("[plot_data:interactions] wrote interaction_Y_matrix.png")
 
   # 2. glasso (W) interaction matrix — intensity, unobserved = grey
@@ -461,7 +461,7 @@ local({
     labs(title = sprintf("glasso interaction matrix  (observed = %d, mean W = %.3f; grey = unobserved)",
                          n_obs, w_mean),
          x = "viruses", y = "bacteria")
-  ggsave(file.path(out, "interaction_W_matrix.png"), pW, width = 5.4, height = 4.4, dpi = 150)
+  ggsave(file.path(out, "interaction_W_matrix.png"), pW, width = 7.5, height = 6, dpi = 150)
   message("[plot_data:interactions] wrote interaction_W_matrix.png")
 
   # 3. Combined agreement matrix — both / CRISPR only / glasso only
@@ -514,7 +514,7 @@ local({
     labs(title = sprintf("CRISPR vs glasso (W>%.1f)  (CRISPR = %d, glasso = %d, overlap = %d)",
                          w_thr, n_c, n_g, n_both),
          x = "viruses", y = "bacteria")
-  ggsave(file.path(out, "interaction_combined_matrix.png"), pC, width = 5.4, height = 4.4, dpi = 150)
+  ggsave(file.path(out, "interaction_combined_matrix.png"), pC, width = 7.5, height = 6, dpi = 150)
   message("[plot_data:interactions] wrote interaction_combined_matrix.png")
 
   # 4. Nestedness — CRISPR (binary), degree-sorted
@@ -531,7 +531,7 @@ local({
     scale_fill_manual(values = c(none = "black", edge = "#E8542F"), name = NULL) +
     labs(title = sprintf("CRISPR nestedness  (NODF = %.1f)", nodf_Y),
          x = "viruses (sorted by degree)", y = "bacteria (sorted by degree)")
-  ggsave(file.path(out, "nestedness_Y.png"), pNY, width = 5.4, height = 4.4, dpi = 150)
+  ggsave(file.path(out, "nestedness_Y.png"), pNY, width = 7.5, height = 6, dpi = 150)
   message("[plot_data:interactions] wrote nestedness_Y.png")
 
   # 5. Nestedness — glasso (intensity), degree-sorted on presence
@@ -558,7 +558,7 @@ local({
                         name = "W", limits = c(0, 1)) +
     labs(title = sprintf("glasso nestedness — observed block  (NODF = %.1f, presence = W>0)", nodf_W),
          x = "viruses (sorted by degree)", y = "bacteria (sorted by degree)")
-  ggsave(file.path(out, "nestedness_W.png"), pNW, width = 5.4, height = 4.4, dpi = 150)
+  ggsave(file.path(out, "nestedness_W.png"), pNW, width = 7.5, height = 6, dpi = 150)
   message("[plot_data:interactions] wrote nestedness_W.png")
 
   # 6. Intersection-only heatmaps — W and Y on the W-observed block (no grey)
@@ -582,7 +582,7 @@ local({
            x = sprintf("viruses   (m = %d)", ncol(Wsub)),
            y = sprintf("bacteria   (n = %d)", nrow(Wsub))) +
       theme(axis.title = element_text(size = 20, face = "bold"))
-    ggsave(file.path(out, "interaction_W_matrix_observed.png"), pWs, width = 5.4, height = 4.4, dpi = 150)
+    ggsave(file.path(out, "interaction_W_matrix_observed.png"), pWs, width = 7.5, height = 6, dpi = 150)
     message("[plot_data:interactions] wrote interaction_W_matrix_observed.png")
 
     # 6b. CRISPR Y on the intersection, degree-sorted by its own connectivity
@@ -599,7 +599,7 @@ local({
            x = sprintf("viruses   (m = %d)", ncol(Ysub)),
            y = sprintf("bacteria   (n = %d)", nrow(Ysub))) +
       theme(axis.title = element_text(size = 20, face = "bold"))
-    ggsave(file.path(out, "interaction_Y_matrix_observed.png"), pYs, width = 5.4, height = 4.4, dpi = 150)
+    ggsave(file.path(out, "interaction_Y_matrix_observed.png"), pYs, width = 7.5, height = 6, dpi = 150)
     message("[plot_data:interactions] wrote interaction_Y_matrix_observed.png")
   } else {
     message("[plot_data:interactions] not enough W-observed rows/cols for intersection plots; skipped.")

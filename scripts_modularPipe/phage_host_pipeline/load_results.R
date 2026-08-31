@@ -74,23 +74,20 @@ LEVEL_COLORS <- c(genus = "#9EC1DC", family = "#2B5D8A")
 
 
 # Shared publication theme
-# FIG_SCALE multiplies every text size in the theme. The cohort panels are
-FIG_SCALE <- 2.0
-
-pub_theme <- theme_minimal(base_size = 12 * FIG_SCALE) +
+pub_theme <- theme_minimal(base_size = 12) +
   theme(
-    plot.title       = element_text(face = "bold", size = 13 * FIG_SCALE),
-    plot.subtitle    = element_text(color = "grey40", size = 10 * FIG_SCALE),
-    plot.caption     = element_text(color = "grey55", size = 8 * FIG_SCALE, hjust = 0),
+    plot.title       = element_text(face = "bold", size = 13),
+    plot.subtitle    = element_text(color = "grey40", size = 10),
+    plot.caption     = element_text(color = "grey55", size = 8, hjust = 0),
     panel.grid.minor = element_blank(),
-    panel.grid.major = element_line(color = "grey92", linewidth = 0.3 * FIG_SCALE),
+    panel.grid.major = element_line(color = "grey92", linewidth = 0.3),
     strip.background = element_rect(fill = "grey95", color = NA),
-    strip.text       = element_text(face = "bold", size = 11 * FIG_SCALE),
-    axis.title       = element_text(size = 11 * FIG_SCALE),
-    axis.text        = element_text(size = 10 * FIG_SCALE, color = "grey25"),
+    strip.text       = element_text(face = "bold", size = 11),
+    axis.title       = element_text(size = 11),
+    axis.text        = element_text(size = 10, color = "grey25"),
     legend.position  = "right",
-    legend.title     = element_text(size = 10 * FIG_SCALE, face = "bold"),
-    legend.text      = element_text(size = 9 * FIG_SCALE),
+    legend.title     = element_text(size = 10, face = "bold"),
+    legend.text      = element_text(size = 9),
     plot.margin      = margin(10, 12, 10, 10)
   )
 
@@ -98,7 +95,7 @@ pub_theme <- theme_minimal(base_size = 12 * FIG_SCALE) +
 # labels and drop the vertical grid lines, which carry no meaning there.
 theme_categorical_x <- function() {
   theme(panel.grid.major.x = element_blank(),
-        axis.text.x = element_text(size = 11 * FIG_SCALE, color = "grey15",
+        axis.text.x = element_text(size = 11, color = "grey15",
                                    angle = 20, hjust = 1))
 }
 

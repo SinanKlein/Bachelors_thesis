@@ -1,7 +1,8 @@
 """
 graph_export.py — export the raw bacteria x virus adjacency matrices to CSV.
 
-Reads graph_data.npz 
+Reads graph_data.npz and nothing else, so it does not depend on a model having
+been fit and is unaffected by the representation the pipeline is configured for.
 
 Writes into <run>/graph_matrices/ :
   Y_adjacency.csv        (n_bact x n_virus) 0/1   CRISPR linkage
@@ -9,6 +10,15 @@ Writes into <run>/graph_matrices/ :
   W_mask_adjacency.csv   (n_bact x n_virus) 0/1   1 where W is observed
   bact_ids.csv           one bacteria id per row
   virus_ids.csv          one virus id per row
+
+All matrix CSVs are headerless numeric grids (row = bacteria, col = virus), read
+in R with as.matrix(read.csv(f, header = FALSE)).
+
+The interaction structure is visualised by plot_data.R, which draws the
+interaction-matrix heatmaps and the nestedness views from these files. The old
+bipartite "hairball" network figure was removed: on a grid this size it was
+unreadable, and the heatmaps and nestedness plots show the same structure
+quantitatively.
 
 Usage:
   python graph_export.py --run-id <run_id>
@@ -72,7 +82,11 @@ def export_matrices(run_id: str, graph_path: Path) -> None:
     print(f"[export_matrices] wrote 5 files to {out} | "
           f"CRISPR edges={n_crispr}, W-observed cells={n_obs}")
 
+
+
+# ---------------------------------------------------------------------------
 # Main
+# ---------------------------------------------------------------------------
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", type=Path, default=None,

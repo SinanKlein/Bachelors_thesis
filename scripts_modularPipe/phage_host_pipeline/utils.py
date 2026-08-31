@@ -22,7 +22,10 @@ from sklearn.metrics import (
     r2_score,
 )
 
+
+# =============================================================================
 # 1. IO
+# =============================================================================
 def make_run_id() -> str:
     """YYYYMMDD_HHMMSS_<git_short_hash> — unique per run."""
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -33,32 +36,6 @@ def make_run_id() -> str:
     except Exception:
         h = "nogit"
     return f"{ts}_{h}"
-
-
-def env_stamp() -> dict:
-    """Interpreter and library versions, recorded into every run log.
-
-    Run IDs fall back to "nogit" outside a git checkout, so without this the
-    artefacts carry no record of what produced them. Optional dependencies are
-    reported as None when absent rather than raising.
-    """
-    import platform
-    import numpy
-    import pandas
-    import sklearn
-    stamp = {
-        "python":   platform.python_version(),
-        "platform": platform.platform(),
-        "numpy":    numpy.__version__,
-        "pandas":   pandas.__version__,
-        "sklearn":  sklearn.__version__,
-    }
-    for optional in ("torch", "xgboost"):
-        try:
-            stamp[optional] = __import__(optional).__version__
-        except Exception:
-            stamp[optional] = None
-    return stamp
 
 
 def load_config(path: Path | str) -> dict:
@@ -121,7 +98,10 @@ def derive_fold_seed(base_seed: int, outer_fold: int, inner_fold: int) -> int:
     """
     return int(base_seed * 10_000 + outer_fold * 100 + (inner_fold + 1))
 
+
+# =============================================================================
 # 2. Reducers
+# =============================================================================
 class BaseReducer:
     name: str = "base"
 
@@ -140,6 +120,10 @@ class BaseReducer:
 
 class MeanVarianceReducer(BaseReducer):
     """Keep the top-`quantile` fraction of features ranked by raw variance.
+
+    Important: this reducer no longer performs log1p or any transformation before
+    ranking. The score is always var(X) on the raw input matrix. Downstream
+    preprocessing may transform the kept columns afterwards, e.g. CLR.
     """
     name = "mean_variance"
 
@@ -249,6 +233,7 @@ REDUCERS = {
     "mean_variance": MeanVarianceReducer,
     "top_k_variance": TopKVarianceReducer,
     "identity":      IdentityReducer,
+    # add: "svd": SVDReducer, ...
 }
 
 
@@ -257,7 +242,10 @@ def build_reducer(name: str, **params) -> BaseReducer:
         raise KeyError(f"Unknown reducer '{name}'. Available: {list(REDUCERS)}")
     return REDUCERS[name](**params)
 
+
+# =============================================================================
 # 3. Splits — nested CV
+# =============================================================================
 def make_splits_dataframe(
     y: np.ndarray,
     n_outer: int = 10,
@@ -324,7 +312,9 @@ def apply_feature_transform(X: np.ndarray, kind: str,
     )
 
 
+# =============================================================================
 # 3b. Ablation arms — config helpers
+# =============================================================================
 def get_arms(cfg: dict) -> list[dict]:
     """The list of ablation arms from the config (empty if the block is absent)."""
     return list(cfg.get("ablation", {}).get("arms", []) or [])
@@ -346,8 +336,23 @@ def anchor_arm(cfg: dict) -> str:
     arms = get_arms(cfg)
     return arms[0]["name"] if arms else ""
 
+
+
+
+# =============================================================================
 # 4. Metrics
+# =============================================================================
 # The pipeline reports AUC and AP on the binary tasks and R^2 on the regression
+# task, and nothing else. Precision / recall / F1 and the top-k discovery
+# diagnostics were removed: none was read by a plot, a table or the write-up,
+# and each one needed a probability cutoff that is not part of any claim the
+# thesis makes. The full threshold curve is still available in cutoff_sweep.csv
+# if it is ever wanted.
+#
+# `n`, `n_pos` and `n_neg` stay. They are fold bookkeeping rather than
+# performance metrics — they record how large and how balanced a fold was, which
+# is what makes an AUC comparable across folds, and shuffle_probe.py reads them.
+
 
 def basic_metrics(y_true: np.ndarray, prob: np.ndarray) -> dict:
     """Binary classification: AUC and AP, plus the fold's size and balance."""
@@ -402,6 +407,11 @@ def cutoff_sweep(y_true: np.ndarray, prob: np.ndarray, grid: np.ndarray) -> pd.D
 
 def regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
     """Regression: R^2 only.
+
+    MSE / RMSE / MAE and the target descriptives (y_mean, y_std) were removed —
+    R^2 is the only regression number the write-up reports, and on this task it
+    is negative in every cohort, which the error scales do not add to. `n` stays
+    as fold bookkeeping.
     """
     y_true = np.asarray(y_true, dtype=float)
     y_pred = np.asarray(y_pred, dtype=float)

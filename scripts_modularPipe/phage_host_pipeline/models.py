@@ -26,7 +26,10 @@ warnings.filterwarnings(
     message=".*Inconsistent values: penalty.*",
 )
 
+
+# ---------------------------------------------------------------------------
 # Base interfaces
+# ---------------------------------------------------------------------------
 class BaseClassifier:
     name: str = "base_clf"
     task_type: str = "binary"
@@ -42,7 +45,10 @@ class BaseRegressor:
     def fit(self, X, y):  raise NotImplementedError
     def predict(self, X):  raise NotImplementedError
 
+
+# ---------------------------------------------------------------------------
 # Classifiers
+# ---------------------------------------------------------------------------
 class SparseLogistic(BaseClassifier):
     name = "sparse_logistic"
     task_type = "binary"
@@ -106,6 +112,10 @@ class XGBClassifierWrap(BaseClassifier):
 class TorchMLPBase:
     """Small one-hidden-layer MLP using the same core hyperparameters as 07c.
 
+    This is intentionally a plain predictor, not a bottleneck model: there is no
+    information bottleneck. The post-ReLU hidden activation can be tapped as a
+    deterministic latent via encode_latent() for the latent-space analysis,
+    without altering the predictor (the forward path and weights are unchanged).
     Architecture:
         X -> Linear(input, hidden_dim) -> ReLU -> Dropout -> Linear(hidden_dim, 1)
     """
@@ -131,6 +141,11 @@ class TorchMLPBase:
 
     def encode_latent(self, X, batch_size=None):
         """Return the post-ReLU hidden activation as a deterministic latent.
+
+        This is the concatenation-MLP whose post-ReLU hidden activation is the
+        (hidden_dim)-dimensional representation read straight out of the
+        trained network. It does not change the predictor; the forward path used
+        by predict_proba/predict is untouched.
         """
         import torch
         if batch_size is None:
@@ -201,7 +216,9 @@ class MLPClassifier(BaseClassifier, TorchMLPBase):
             logits = self._model(X_t).squeeze(-1)
             return torch.sigmoid(logits).cpu().numpy()
 
+# ---------------------------------------------------------------------------
 # Regressors
+# ---------------------------------------------------------------------------
 class LinearRegressor(BaseRegressor):
     """
     Ridge regression with standardization.
@@ -309,8 +326,13 @@ class XGBRegressorWrap(BaseRegressor):
     def predict(self, X):
         return self._model.predict(X)
 
+
+# ---------------------------------------------------------------------------
 # Registry
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # Joint MLP baseline: one shared trunk, two heads (Y and W_class)
+# ---------------------------------------------------------------------------
 def _make_mlp_yw_net(x_dim, hidden_dim, dropout):
     import torch.nn as nn
     class Net(nn.Module):
@@ -332,6 +354,14 @@ def _make_mlp_yw_net(x_dim, hidden_dim, dropout):
 
 
 class MLPYWJoint:
+    """Plain MLP with a shared hidden trunk and two classification heads.
+
+    This is the joint counterpart to the separate mlp_clf / mlp_reg baselines:
+    a single Linear->ReLU->Dropout trunk feeds a Y head and a W-class head, both
+    trained with BCE. The shared post-ReLU hidden activation is the joint latent
+    exported for analysis (encode_latent), directly comparable to the single-task
+    mlp_latent_y and mlp_latent_w_class latents.
+    """
     name = "mlp_yw_joint"
     task_type = "joint_y_w"
 

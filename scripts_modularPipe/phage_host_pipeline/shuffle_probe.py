@@ -1,6 +1,15 @@
 """
 Shuffled-Y control for the joint (Y + W-class) MLP.
 
+QUESTION
+--------
+Joint training lifts `w_class` above the single-task MLP. Two explanations:
+
+  (a) shared structure  -- Y and W describe overlapping biology, so the Y head
+      teaches the shared trunk something the W head can use.
+  (b) regularisation    -- the second loss simply constrains the trunk, so the
+      network memorises less. Any auxiliary task would do.
+
 This stage separates them. It refits the SAME joint model on the SAME folds,
 once with the real Y labels and several times with the Y labels randomly
 permuted inside the training set. Real W labels throughout; evaluation always
@@ -9,6 +18,26 @@ against real held-out labels.
   real lift  >  shuffled lift   ->  (a) shared structure
   real lift  ~= shuffled lift   ->  (b) regularisation
 
+ONE COHORT PER RUN
+------------------
+Like every other stage, this reads the cohort from `paths.py` (COHORT) and
+writes under RESULTS_DIR / DATASET_NAME / <run_id>. To control another cohort,
+change COHORT in paths.py and run that cohort's pipeline, exactly as for
+preprocess, experiment or ablation. There is deliberately no loop over cohorts
+here: the rest of the pipeline has none either, and a stage that quietly reached
+into other cohorts' result folders would be the one place where the "one cohort
+per run" rule did not hold.
+
+WHAT IT READS AND WRITES
+------------------------
+It does not re-run preprocessing. It reads this run's
+`preprocessing/data_filtered.npz` and `preprocessing/splits.csv`, so the
+representation and the ten outer folds are identical to the ones the experiment
+used, which is what makes the comparison paired. It reads
+`metrics/metrics_by_fold.csv`, when present, only to check that the unshuffled
+condition reproduces this run's own `mlp_latent_yw` numbers.
+
+Nothing existing is modified. Output goes to a new folder:
 
     <run_dir>/shuffle_probe/shuffle_probe_metrics.csv   one row per fold x condition x head
     <run_dir>/shuffle_probe/shuffle_probe_summary.csv   real vs shuffled, paired over folds
@@ -20,6 +49,17 @@ USAGE
     python shuffle_probe.py --config default.yaml --run-id <run_id> --n-shuffles 10
     python shuffle_probe.py --config default.yaml --run-id <run_id> --epochs 10 --n-shuffles 1
 
+The last form is a smoke test that finishes in under a minute. Read the `y` row
+of the summary: it should collapse from ~0.80 to ~0.50, because a model trained
+on permuted Y labels cannot predict real Y. If it does not, the shuffle is not
+doing what it should and the `w_class` row means nothing.
+
+RUNTIME
+-------
+n_folds x (1 + n_shuffles) full model fits: 60 at the defaults. Cost scales with
+(observed pairs x features), so GvHD (19,264 x 7,168) is roughly nine times CRC
+(5,766 x 2,756) and dominates. On two CPU cores CRC took about 20 minutes and
+GvHD a few hours; with CUDA the model picks up the GPU on its own.
 """
 from __future__ import annotations
 
@@ -47,7 +87,10 @@ JOINT_PARAMS_FALLBACK = dict(
 )
 BASE_SEED_FALLBACK = 42
 
+
+# ---------------------------------------------------------------------------
 # Config and inputs
+# ---------------------------------------------------------------------------
 def load_joint_params(rdir: Path, config_path: Path):
     """mlp_latent_yw's params and the base seed.
 
@@ -100,7 +143,10 @@ def load_run(rdir: Path):
     splits = splits[splits["inner_fold"] == -1]      # outer folds only
     return X, y, w, mask, splits
 
+
+# ---------------------------------------------------------------------------
 # One fold, one condition
+# ---------------------------------------------------------------------------
 def fit_one(X, y, w, tr, ev, params, seed, shuffle_seed=None):
     """Fit the joint model on one fold; return metrics for both heads.
 
@@ -177,7 +223,10 @@ def run_probe(rdir: Path, run_id: str, params, base_seed, n_shuffles, verbose=Tr
 
     return pd.DataFrame(rows)
 
+
+# ---------------------------------------------------------------------------
 # Reporting
+# ---------------------------------------------------------------------------
 def summarise(df):
     """Per head: real vs shuffled, paired across the shared folds."""
     from scipy import stats
@@ -235,6 +284,8 @@ def validate_against_run(df, rdir: Path):
             }
     return rep
 
+
+# ---------------------------------------------------------------------------
 def main():
     ap = argparse.ArgumentParser(
         description="Shuffled-Y control for the joint model, for one cohort and one run.")

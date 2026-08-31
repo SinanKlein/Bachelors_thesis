@@ -15,10 +15,9 @@
 #
 # Verify an install with:
 #
-#     python tests/test_static.py     # source checks over the Python modules
-#     python tests/test_r_static.py   # the same, for the R layer
+#     python tests/test_golden.py
 #
-# Both run in about a second and need no data, no torch and no R runtime.
+# which runs the pipeline on a synthetic fixture and checks every output hash.
 
 # --- core: required by every stage -------------------------------------------
 numpy>=2.2,<3
@@ -40,7 +39,7 @@ xgboost>=2.0
 torch>=2.0
 
 # --- tests --------------------------------------------------------------------
-# Optional: both static suites also run standalone with plain python.
+# Optional: tests/test_golden.py also runs standalone with plain python.
 pytest>=8.0
 
 # --- R -------------------------------------------------------------------------

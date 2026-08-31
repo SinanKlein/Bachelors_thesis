@@ -30,11 +30,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from paths import GRAPH_DATA_FILE, preprocessing_dir, run_dir
 from utils import (
     load_config, load_graph_data, write_csv, write_json, write_npz,
-    freeze_config, make_run_id, make_splits_dataframe, env_stamp,
+    freeze_config, make_run_id, make_splits_dataframe,
 )
 from features import select_and_transform, feature_stats_long
 
+
+# ---------------------------------------------------------------------------
 # Helpers
+# ---------------------------------------------------------------------------
 def extract_label(data: dict, source: str, mask_source: str | None,
                   binarize: bool, task_type: str,
                   binarize_threshold: float = 0.0
@@ -126,7 +129,10 @@ def flatten_pair_labels(data: dict) -> dict:
     data["Mask_observed"] = Wmask.flatten()          # 1 where W is observed
     return data
 
+
+# ---------------------------------------------------------------------------
 # Main
+# ---------------------------------------------------------------------------
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True, type=Path)
@@ -141,7 +147,7 @@ def main() -> None:
     out = preprocessing_dir(run_id)
     freeze_config(cfg, run_dir(run_id) / "config.yaml")
 
-    # 1. Load raw 
+    # ---- 1. Load raw -------------------------------------------------------
     print("[preprocess] === STEP 1/6: load graph_data.npz ===")
     print(f"[preprocess] loading {GRAPH_DATA_FILE}")
     data = load_graph_data(GRAPH_DATA_FILE)
@@ -155,7 +161,7 @@ def main() -> None:
     print(f"[preprocess]   Y=1 (CRISPR positive): {n_pos_Y} ({100*n_pos_Y/n_pairs:.2f}%)")
     print(f"[preprocess]   W observed:            {n_obs_W} ({100*n_obs_W/n_pairs:.2f}%)")
 
-    # 2. Feature selection + transform 
+    # ---- 2. Feature selection + transform ----------------------------------
     # All three switches live in features.py, which the ablation calls too, so
     # the main pipeline and the ablation cannot diverge.
     pcfg = cfg["preprocess"]
@@ -179,13 +185,13 @@ def main() -> None:
     write_csv(feature_stats_df, out / "feature_stats.csv")
     print(f"[preprocess] wrote feature_stats.csv ({len(feature_stats_df)} rows)")
 
-    #  3. Save filtered features (npz) 
+    # ---- 3. Save filtered features (npz) -----------------------------------
     print("[preprocess] === STEP 3/6: save filtered features ===")
     passthrough = {k: v for k, v in data.items() if k not in pcfg["apply_to"]}
     write_npz({**filtered_arrays, **passthrough}, out / "data_filtered.npz")
     print(f"[preprocess] wrote data_filtered.npz")
 
-    # - 4. Generate 10 train/test splits -----------------------------------
+    # ---- 4. Generate 10 train/test splits -----------------------------------
     print("[preprocess] === STEP 4/6: build 10 train/test splits ===")
     rcfg = cfg["resampling"]
     strat_task = find_first_binary_task(cfg["tasks"])
@@ -206,7 +212,8 @@ def main() -> None:
     )
     write_csv(splits_df, out / "splits.csv")
     print(f"[preprocess] wrote splits.csv ({len(splits_df)} rows)")
-    #  5. Label table (one row per sample x task) 
+
+    # ---- 5. Label table (one row per sample x task) ------------------------
     print("[preprocess] === STEP 5/6: build label table ===")
     label_rows = []
     for task in cfg["tasks"]:
@@ -229,16 +236,15 @@ def main() -> None:
     write_csv(labels_long, out / "labels.csv")
     print(f"[preprocess] wrote labels.csv ({len(labels_long)} rows)")
 
-    #  6. Preprocessing summary log 
+    # ---- 6. Preprocessing summary log --------------------------------------
     print("[preprocess] === STEP 6/6: write summary log ===")
     summary = {
         "run_id":      run_id,
         "config_used": str(args.config),
-        "env":         env_stamp(),
         "reducer":     pcfg["reducer"],
         "quantile":    pcfg["quantile"],
         "variance_filter": "raw",
-        "post_filter_transform": transform,
+        "post_filter_transform": "clr",
         "clr_pseudocount": pseudocount,
         "n_pairs":     int(n_pairs),
         "n_Y_pos":     int(n_pos_Y),

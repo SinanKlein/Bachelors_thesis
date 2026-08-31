@@ -8,6 +8,10 @@ output already exists (use --force to redo):
                across the outer splits. Shows whether W becomes learnable at ANY
                cut, not just the one the task uses.
 
+This was previously a block inside experiment.py. It is not part of the
+experiment; it is an analysis OF it, so it lives here and experiment.py is left
+doing one job.
+
 Usage:
   python analyses.py --config default.yaml --run-id <run_id>
   python analyses.py --config default.yaml --run-id <run_id> --force
@@ -34,10 +38,14 @@ from features import pair_matrix_from_filtered
 def _p(msg: str) -> None:
     print(msg, flush=True)
 
+
+# ---------------------------------------------------------------------------
 # Block 1: W-threshold AUC sweep
+# ---------------------------------------------------------------------------
 # For each threshold t over the continuous glasso edge-probability W, build the
 # binary label 1[W > t] and fit an L2 ("ridge-style") logistic regression on the
 # pair feature matrix X, scoring test AUC across the 10 outer train/test splits.
+# We only need AUC here, not feature selection, so L2 + a fast solver (lbfgs)
 # replaces the old L1/liblinear model: ~50-100x faster per fit. The (threshold x
 # split) fits are independent and run in parallel via joblib.
 def run_w_threshold_sweep(cfg: dict, run_id: str, labels_df: pd.DataFrame,
@@ -60,6 +68,7 @@ def run_w_threshold_sweep(cfg: dict, run_id: str, labels_df: pd.DataFrame,
 
     # 10 evenly spaced *interior* thresholds in (0, 1): excludes 0 and 1, which
     # would make 1[W > t] degenerate (all-positive / all-negative) for a clipped
+    # edge probability. For n_cuts=10 -> 0.0909, 0.1818, ..., 0.9091.
     thresholds = np.linspace(0.0, 1.0, n_cuts + 2)[1:-1]
 
     sub = labels_df[labels_df["task"] == w_task].sort_values("sample_id")
@@ -135,7 +144,10 @@ def run_w_threshold_sweep(cfg: dict, run_id: str, labels_df: pd.DataFrame,
           f"w_threshold_sweep.csv ({len(per_split)} rows), summary "
           f"({len(agg)} model x threshold rows)")
 
+
+# ---------------------------------------------------------------------------
 # Main
+# ---------------------------------------------------------------------------
 BLOCKS = ("w_threshold",)
 
 

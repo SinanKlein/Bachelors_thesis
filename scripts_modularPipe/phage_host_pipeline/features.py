@@ -29,7 +29,10 @@ import pandas as pd
 
 from utils import build_reducer, apply_feature_transform
 
+
+# ---------------------------------------------------------------------------
 # Config helper
+# ---------------------------------------------------------------------------
 def resolve_quantile(quantile_cfg, source: str) -> float:
     """`quantile` may be a single number for every source, or a per-source map."""
     if isinstance(quantile_cfg, dict):
@@ -43,7 +46,10 @@ def resolve_quantile(quantile_cfg, source: str) -> float:
         )
     return float(quantile_cfg)
 
+
+# ---------------------------------------------------------------------------
 # Selection
+# ---------------------------------------------------------------------------
 def fit_selectors(data: dict, pcfg: dict, selection: str, log: str = "") -> dict:
     """Fit one reducer per feature source. Returns {source: fitted reducer}.
 
@@ -85,7 +91,10 @@ def fit_selectors(data: dict, pcfg: dict, selection: str, log: str = "") -> dict
 
     raise ValueError(f"Unknown selection {selection!r} (use 'quantile' or 'equal_dim')")
 
+
+# ---------------------------------------------------------------------------
 # Selection + transform
+# ---------------------------------------------------------------------------
 def select_and_transform(data: dict, pcfg: dict, selection: str, transform: str,
                          log: str = "") -> tuple[dict, dict]:
     """Select features by raw variance, then transform the kept columns.
@@ -113,7 +122,10 @@ def select_and_transform(data: dict, pcfg: dict, selection: str, transform: str,
 
     return arrays, reducers
 
+
+# ---------------------------------------------------------------------------
 # Pair assembly
+# ---------------------------------------------------------------------------
 def pair_matrix(Xb: np.ndarray, Xv: np.ndarray, bact_idx, virus_idx,
                 combine: str = "concat") -> np.ndarray:
     """Expand per-entity features to one row per bacterium x virus pair."""

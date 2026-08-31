@@ -3,12 +3,16 @@ descriptives.py — emit every descriptive number the Data chapter reports.
 
 Reads graph_data.npz and nothing else, so it does not depend on a model having
 been fit and is unaffected by the representation the pipeline is configured for.
+It exists because those numbers were previously recoverable only by reading text
+baked into a plot title, which meant the thesis quoted figures no script
+produced. Every number in the Data chapter should come out of here.
 
 Writes into <run>/metrics/ :
   descriptives.json   nested, grouped by scope
   descriptives.csv    tidy long format: scope, metric, value
 
 Scopes
+------
   grid      the full genus x vOTU Cartesian product
   mask      the W-observed block, i.e. the pairs every model actually sees
   degree_*  CRISPR degree statistics, reported on both scopes because they
@@ -38,7 +42,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from paths import GRAPH_DATA_FILE, metrics_dir
 
+
+# ---------------------------------------------------------------------------
 # Loading
+# ---------------------------------------------------------------------------
 def _load_graph(graph_path: Path):
     d = np.load(graph_path, allow_pickle=True)
     Y = np.asarray(d["Y_adjacency"]).astype(int)
@@ -49,7 +56,10 @@ def _load_graph(graph_path: Path):
     Xv = np.asarray(d["Xv"]).astype(float) if "Xv" in d.files else None
     return Y, W, M, Xb, Xv
 
+
+# ---------------------------------------------------------------------------
 # Blocks
+# ---------------------------------------------------------------------------
 def _degree_stats(A: np.ndarray, top_k: int = 10) -> dict:
     """CRISPR degree summary for one binary matrix."""
     A = (A > 0).astype(int)
@@ -141,7 +151,10 @@ def compute(Y: np.ndarray, W: np.ndarray, M: np.ndarray,
         out["features_viruses"] = _feature_stats(Xv)
     return out
 
+
+# ---------------------------------------------------------------------------
 # Output
+# ---------------------------------------------------------------------------
 def _write(run_id: str, stats: dict) -> Path:
     out = metrics_dir(run_id)
 
@@ -173,7 +186,10 @@ def _report(stats: dict) -> None:
           f"{m['n_both_expected_if_independent']:.0f} expected under "
           f"independence (ratio {m['both_observed_over_expected']:.2f})")
 
+
+# ---------------------------------------------------------------------------
 # Main
+# ---------------------------------------------------------------------------
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", type=Path, default=None,

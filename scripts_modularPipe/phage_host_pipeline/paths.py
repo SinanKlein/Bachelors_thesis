@@ -6,8 +6,17 @@ from here. Nothing else in the pipeline hardcodes paths.
 """
 from pathlib import Path
 
+# ---------------------------------------------------------------------------
 # USER: fill these in
-COHORT = "IBD"                 # "CRC" | "GvHD" | "IBD"
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# THE ONLY THING TO CHANGE WHEN SWITCHING COHORT
+# ---------------------------------------------------------------------------
+# One token drives the raw data folder, the graph_data folder and the results
+# folder. It used to live in four places across two files, which made it
+# possible to build one cohort's data into another cohort's results directory
+# without any error — set it here and nowhere else.
+COHORT = "GvHD"                 # "CRC" | "GvHD" | "IBD"
 
 # Roots that do not change between cohorts.
 DATA_ROOT   = Path(r"C:\Sinan_Klein\LMU\lmu_thesis\datas_final\SINAN_datasets\data")
@@ -23,7 +32,9 @@ COHORT_DIR   = DATA_ROOT / COHORT
 # Change this when you point the pipeline at a different dataset.
 DATASET_NAME = f"{COHORT}_outputs"
 
+# ---------------------------------------------------------------------------
 # Auto-derived 
+# ---------------------------------------------------------------------------
 PIPELINE_DIR    = Path(__file__).resolve().parent
 CONFIG_DIR      = PIPELINE_DIR
 R_DIR           = PIPELINE_DIR
@@ -57,7 +68,10 @@ def find_taxonomy_file(dataset_name: str = DATASET_NAME) -> Path | None:
              if "progenome" not in p.name.lower()]
     return cands[0] if cands else None
 
+
+# ---------------------------------------------------------------------------
 # Per run subfolders (auto created on access)
+# ---------------------------------------------------------------------------
 def run_dir(run_id: str) -> Path:
     # everything for this run lives under RESULTS_DIR / DATASET_NAME / run_id
     d = RESULTS_DIR / DATASET_NAME / run_id

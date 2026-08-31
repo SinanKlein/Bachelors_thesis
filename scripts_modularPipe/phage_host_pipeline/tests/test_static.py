@@ -1,9 +1,9 @@
 """
 Static checks over every module — no data, no models, no torch required.
 
-No runtime test in the repo reaches latent.py, which needs torch, and none
-exercises the sklearn stages end to end. This file closes that gap with checks
-that need nothing but the source.
+The golden test proves the *numbers* do not change, but it can only exercise the
+code paths it runs: the sklearn stages. It cannot reach latent.py, which needs
+torch. This file closes that gap with checks that need nothing but the source.
 
 It exists because of a real bug. Merging export_latent_space.py and
 probe_latent_spaces.py into latent.py silently produced two module-level

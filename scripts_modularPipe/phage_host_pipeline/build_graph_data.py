@@ -1,5 +1,7 @@
 # build_graph_data.py
+#
 # Builds graph_data.npz from the raw X / Y / W tables.
+# ----------------------------
 #   * Edge scope = all pairs in Y.
 #   * Variance based feature selection.
 #   * 10 stratified 80/10/10 splits (StratifiedKFold on the binary Y).
@@ -20,7 +22,10 @@ from sklearn.model_selection import StratifiedKFold
 # Print everything immediately (flush) so progress is visible live.
 print = functools.partial(print, flush=True)
 
+
+# ===========================================================================
 # CONFIG 
+# ===========================================================================
 # Cohort comes from paths.py so this file cannot disagree with the rest of the
 # pipeline about which dataset is being built.
 import sys as _sys0
@@ -44,7 +49,7 @@ Y_FILES = [
     BASE / "abundance_derived" / "network" / "crispr_host_taxid_by_votu_counts.csv.gz",
 ]
 ACTIVE_Y = 0          # 0 = genus_binary (the only feature alignable target)
-BINARIZE_Y = True     # (Y > 0) to 1; harmless if Y is already binary
+BINARIZE_Y = True     # (Y > 0) -> 1; harmless if Y is already binary
 
 #  W : glasso edge probability tables 
 W_FILES = [
@@ -68,9 +73,15 @@ BUILD_FLAT_EDGE_SPLITS = False
 import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parent))
 from paths import RAW_DATA_DIR as OUT_DIR   # noqa: E402
+# ===========================================================================
+
 
 # OUT_DIR is created inside main(); importing this module must have no side effects.
+
+
+# ---------------------------------------------------------------------------
 # Small IO helpers
+# ---------------------------------------------------------------------------
 def resolve_path(p: Path) -> Path:
     """Accept either a file or a folder-that-contains-a-same-named csv."""
     if p.is_file():
@@ -101,7 +112,10 @@ def normalize_name(s: str) -> str:
     """Lowercase + drop all non-alphanumerics. Edit here to tune W matching."""
     return re.sub(r"[^a-z0-9]", "", str(s).lower())
 
+
+# ---------------------------------------------------------------------------
 # X bundle loading  (matrix + row/col label sidecars)
+# ---------------------------------------------------------------------------
 _MATRIX_EXTS = (".mtx.gz", ".mtx", ".npz", ".npy", ".csv.gz", ".csv", ".tsv", ".tsv.gz")
 _SIDECARS = ("__rows.csv", "__cols.csv", "__rows.tsv", "__cols.tsv")
 
@@ -174,7 +188,10 @@ def load_x_bundle(x_dir: Path, base: str):
           f"density={(mat != 0).mean():.4%}")
     return mat.astype(np.float32), entities, procs
 
+
+# ---------------------------------------------------------------------------
 # W alignment onto the Y grid (with optional name normalization)
+# ---------------------------------------------------------------------------
 def align_W_to_grid(W: pd.DataFrame, bact_list, virus_list, normalize: bool):
     """
     Reindex W onto the (bact_list x virus_list) grid.
@@ -205,12 +222,17 @@ def align_W_to_grid(W: pd.DataFrame, bact_list, virus_list, normalize: bool):
                 .to_numpy(dtype=np.float64))
     return W_grid, W_mask
 
+
+# ---------------------------------------------------------------------------
 # Main
+# ---------------------------------------------------------------------------
 def main() -> None:
     """Build graph_data.npz from the raw X / Y / W tables."""
     os.makedirs(OUT_DIR, exist_ok=True)
 
+    # ===========================================================================
     # 1. Load inputs
+    # ===========================================================================
     print("Loading X bundles...")
     Xb_mat, bact_entities, bact_procs = load_x_bundle(X_DIR, X_BUNDLES["bacteria"])
     Xv_mat, virus_entities, virus_procs = load_x_bundle(X_DIR, X_BUNDLES["virus"])
@@ -227,7 +249,9 @@ def main() -> None:
     print(f"  W = {W_FILES[ACTIVE_W].stem}  shape={W_df.shape}")
 
 
+    # ===========================================================================
     # 2. Align entities  (edge scope = Y pairs that also have features)
+    # ===========================================================================
     bact_list  = [b for b in map(str, Y_df.index)   if b in bact_pos]
     virus_list = [v for v in map(str, Y_df.columns) if v in virus_pos]
     n_bact, n_virus = len(bact_list), len(virus_list)
@@ -248,7 +272,9 @@ def main() -> None:
     print(f"  edge scope: {n_bact} x {n_virus} = {n_edges} edges")
 
 
+    # ===========================================================================
     # 3. Build aligned arrays
+    # ===========================================================================
     # node features ordered to match bact_list / virus_list
     Xb_np = Xb_mat[[bact_pos[b]  for b in bact_list]]    # (n_bact,  p_b)
     Xv_np = Xv_mat[[virus_pos[v] for v in virus_list]]   # (n_virus, p_v)
@@ -274,7 +300,9 @@ def main() -> None:
           f"({W_mask.mean():.4f})   <-- W's coverage of the Y grid")
 
 
+    # ===========================================================================
     # 4. Variance feature selection  (same mechanism as before)
+    # ===========================================================================
     # Edge feature variance == node feature variance under uniform edge repetition
 
     feat_var = np.concatenate([Xb_np.var(axis=0), Xv_np.var(axis=0)])
@@ -289,7 +317,9 @@ def main() -> None:
           f"(threshold={var_threshold:.4g})")
 
 
+    # ===========================================================================
     # 5. 10 stratified splits  (80/10/10)
+    # ===========================================================================
     print("\nCreating stratified splits...")
     skf = StratifiedKFold(n_splits=N_SPLITS, shuffle=True, random_state=SEED)
 
@@ -338,7 +368,9 @@ def main() -> None:
               f"test={len(test_idx)} (Y+={Y_flat[test_idx].sum()})")
 
 
+    # ===========================================================================
     # 6. graph_data.npz  (identical keys to the original)
+    # ===========================================================================
     print("\nSaving graph_data.npz...")
     np.savez(
         os.path.join(OUT_DIR, "graph_data.npz"),
@@ -356,7 +388,9 @@ def main() -> None:
     )
 
 
+    # ===========================================================================
     # 7. Summary
+    # ===========================================================================
     print("\n" + "=" * 60)
     print("SUMMARY")
     print("=" * 60)

@@ -1,9 +1,16 @@
 # plot_results.R  (performance plots)
 #
 # One image per (task, metric). Every plot is written TWICE:
-#   *_all.png       — all models (baselines + latent-space MLPs)
+#   *_all.png       — all models (baselines + latent-space MLPs), as before
 #   *_baseline.png  — baseline models only (latent MLPs removed)
+# Titles only (no explanatory subtitles/captions). Where a boxplot summarizes a
+# distribution, the per-model median value is printed on the plot so the reader
+# sees both the shape and the number. Colors are fixed per model via the shared
+# palette in load_results.R, so a model keeps the same color across every image.
 
+# Bootstrap: locate this file so load_results.R can be sourced beside it. This
+# cannot live in load_results.R itself (we need it to find that file), so it is
+# kept to two lines. get_script_dir() is defined there for anything downstream.
 source(file.path(dirname(sub("^--file=", "", grep("^--file=", commandArgs(FALSE),
        value = TRUE)[1])), "load_results.R"))
 
@@ -42,6 +49,9 @@ model_variants <- function(df) {
   )
 }
 
+# experiment.py writes only role == "test" rows now — the training-split rows
+# existed solely for the generalization-gap figures, which were removed. The
+# filter is kept so an OLD run's metrics_by_fold.csv still plots correctly.
 eval_metrics <- res$metrics %>% filter(role != "train")
 
 # One boxplot for a single (task, metric), for a single model-variant.
@@ -77,7 +87,9 @@ save_metric_plot <- function(df_task, metric_col, metric_label, task_name, task_
   }
 }
 
+# ---------------------------------------------------------------------------
 # BINARY tasks: one image per (task, metric)
+# ---------------------------------------------------------------------------
 inner_bin <- eval_metrics %>% filter(task_type == "binary")
 if (nrow(inner_bin) > 0) {
   n_folds <- n_distinct(inner_bin$outer_fold)
@@ -86,7 +98,7 @@ if (nrow(inner_bin) > 0) {
   bin_tasks  <- c(intersect(task_order, unique(inner_bin$task)),
                   setdiff(unique(inner_bin$task), task_order))
 
-  # AUC and AP only.
+  # AUC and AP only. Brier, and the per-fold and ROC images, were dropped:
   # the single summary image per (task, metric) carries the same information.
   bin_metrics <- list(
     auc = list(label = "AUC",               auc = TRUE),
@@ -104,7 +116,9 @@ if (nrow(inner_bin) > 0) {
   }
 }
 
+# ---------------------------------------------------------------------------
 # REGRESSION tasks: one image per (task, metric). No predicted-vs-actual plot.
+# ---------------------------------------------------------------------------
 inner_reg <- eval_metrics %>% filter(task_type == "regression")
 if (nrow(inner_reg) > 0) {
   n_folds <- n_distinct(inner_reg$outer_fold)
@@ -120,7 +134,9 @@ if (nrow(inner_reg) > 0) {
   }
 }
 
+# ---------------------------------------------------------------------------
 # OUTER TEST SUMMARY (single fit per outer split) - CSV
+# ---------------------------------------------------------------------------
 if (nrow(eval_metrics) > 0) {
   outer_summary <- eval_metrics %>%
     mutate(task_label = prettify_task(task)) %>%
