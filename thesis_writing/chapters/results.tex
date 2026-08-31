@@ -1,0 +1,321 @@
+
+\subsection{Representation ablation}
+\label{res:ablation}
+Table~\ref{tab:arms} defines the four-arm ladder, evaluated on the same folds and models as the main
+experiment, on $y$ and $w_{\text{class}}$; per-arm means and standard deviations for every cohort are given in
+Table~\ref{tab:app-ablation}. We fix the arm throughout the pipeline with a rule:
+an arm is adopted over its predecessor only if the mean AUC gap exceeds one fold's standard
+deviation.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/fig_arm_ladder_crc.png}
+    \caption{CRC}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/fig_arm_ladder_gvhd.png}
+    \caption{GvHD}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/fig_arm_ladder_ibd.png}
+    \caption{IBD}
+  \end{subfigure}
+  \caption{Representation ablation: test AUC by arm, model and task}
+  \label{fig:arm-ladder}
+\end{figure}
+\FloatBarrier
+
+On the $y$ task, arm 4 gives the highest, or near highest, mean AUC for both nonlinear models in
+each cohort (CRC: MLP $0.812$, XGBoost $0.810$; GvHD: MLP $0.789$, XGBoost $0.782$; IBD: MLP
+$0.810$, XGBoost $0.794$; Figure~\ref{fig:arm-ladder}). In CRC, this comes from a single step:
+swapping the CLR-transformation for presence/absence (arm 1 $\to$ 2) gives an incremental advantage
+to the nonlinear models (MLP $+0.023$ against a fold-gap SD of $0.012$; XGBoost $+0.034$ against
+$0.025$) but not to sparse logistic ($+0.003$ against $0.009$), and adding equal-dimension selection
+and summation (arm 2 $\to$ 4) moves both models by less than their own fold-gap SD, so neither
+factor is decisive on its own. In GvHD, presence/absence only clears the bar for XGBoost ($+0.016$
+against $0.015$); equal-dimension selection then drops both nonlinear models and sparse logistic
+(MLP $-0.036$ against $0.033$; XGBoost $-0.029$ against $0.014$; sparse logistic $-0.015$ against
+$0.010$), and summation recovers almost the same amount (MLP $+0.039$ against $0.031$; XGBoost
+$+0.027$ against $0.012$; sparse logistic $+0.016$ against $0.008$), so arm 1 $\to$ 4 is not
+decisive overall. In IBD, no step clears the bar for any model. Sparse logistic only moves opposite
+to the nonlinear models in CRC, over the full ladder ($-0.011$ against $0.010$), driven mainly by
+equal-dimension selection ($-0.020$ against $0.015$).
+
+For CRC and IBD, on $w_{\text{class}}$, no arm is decisive. For GvHD however there are some decisive factors.
+For example for the XGBoost model, arm 4 underperforms arm 1 ($-0.009$ against $0.006$). Besides XGBoost,
+no other model is decisive either. Because of this reason, we cannot choose an arm solely based on the $w_{\text{class}}$
+task result and need to rely on the $y$ task results. Additionally, we select the arm based on the MLP alone, since that is
+the model the main experiment is built on via the latent space (Section~\ref{sec:joint}). XGBoost's agreement corroborates
+the choice, without being decisive on its own. We keep the sparse logistic regression fixed as an unoptimised linear reference.
+
+\subsection{Binarisation threshold}
+\label{res:wthreshold}
+As will be discussed in Section~\ref{res:main-wreg}, $w_{\text{reg}}$ performs poorly across all
+cohorts, which is why we binarise it into $w_{\text{class}}$. As explained in
+Section~\ref{sec:wthreshold}, we do this by fitting two different models across ten different
+cutoffs, in order to determine which one is the most optimal.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/fig_wthreshold_crc.png}
+    \caption{CRC}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/fig_wthreshold_gvhd.png}
+    \caption{GvHD}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/fig_wthreshold_ibd.png}
+    \caption{IBD}
+  \end{subfigure}
+  \caption{Test AUC against the binarisation threshold $t$ on $W$}
+  \label{fig:wthreshold}
+\end{figure}
+\FloatBarrier
+
+No cohort or model exceeds $0.62$ AUC at any interior threshold (Figure~\ref{fig:wthreshold}). Additionally,
+the variance of the AUC grows as the threshold rises. The reason is that with an increasing threshold, the number
+of pairs that belong to the positive class shrinks: at $t=0$, $w_{\text{class}}$ is close to balanced (43\% positive
+in CRC, 49\% in GvHD, 38\% in IBD) but by $t\approx0.5$ only 5--7\% of pairs remain positive, and the sweep excludes
+$t=1$ itself, where $\mathbf{1}[W>t]$ would contain no positive pairs at all. That's consistent with $t=0$ being the
+best cutoff among those tested for the $w_{\text{class}}$ task.
+
+
+\subsection{Taxonomic resolution}
+\label{res:taxres}
+Genus-level AUC is slightly higher than family-level AUC across all three cohorts, on both tasks,
+with only two trivial exceptions in GvHD (Figure~\ref{fig:family}; the underlying numbers are in
+Table~\ref{tab:app-family}). Most families are singletons
+(18 of 27 in CRC, 15 of 32 in GvHD, 20 of 34 in IBD), where genus and family level coincide by
+construction and share the same label. The remaining, multi-member families do not always share a
+consistent label across their genera, so the median aggregation used to collapse them discards real
+heterogeneity, which causes the slight drop in AUC. On $y$, where this effect is real, sparse logistic
+loses the most from it, since its per-genus probabilities carry the most direct signal, while the
+nonlinear models lose comparatively little. On $w_{\text{class}}$, where no real effect exists to
+begin with, no consistent pattern emerges across cohorts or models. We therefore base the resolution
+choice on $y$ alone and fix genus level throughout the rest of the pipeline.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/fig_family_crc.png}
+    \caption{CRC}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/fig_family_gvhd.png}
+    \caption{GvHD}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/fig_family_ibd.png}
+    \caption{IBD}
+  \end{subfigure}
+  \caption{Genus- vs family-level AUC, by task and model}
+  \label{fig:family}
+\end{figure}
+\FloatBarrier
+
+
+\subsection{Prediction performance}
+\label{res:main}
+We report AUC and average precision (AP) for $y$, $w_{\text{class}}$, and $w_{\text{reg}}$ across all
+three cohorts, one subsubsection per task, with baseline and latent-space models reported together.
+
+\subsubsection{$y$}
+\label{res:main-y}
+
+\begin{table}[htbp]
+  \centering
+  \caption{Test performance on $y$}
+  \label{tab:perf-y}
+  \begin{tabular}{llrr}
+    \hline
+    Cohort & Model                     & AUC   & AP    \\
+    \hline
+    CRC    & Sparse logistic           & 0.711 & 0.165 \\
+           & XGBoost                   & 0.810 & 0.259 \\
+           & MLP (baseline)            & 0.812 & 0.263 \\
+           & MLP (latent, single-task) & 0.812 & 0.263 \\
+           & MLP (joint)               & 0.810 & 0.276 \\
+    \hline
+    IBD    & Sparse logistic           & 0.726 & 0.243 \\
+           & XGBoost                   & 0.794 & 0.283 \\
+           & MLP (baseline)            & 0.810 & 0.285 \\
+           & MLP (latent, single-task) & 0.810 & 0.285 \\
+           & MLP (joint)               & 0.802 & 0.271 \\
+    \hline
+    GvHD   & Sparse logistic           & 0.625 & 0.074 \\
+           & XGBoost                   & 0.782 & 0.151 \\
+           & MLP (baseline)            & 0.789 & 0.205 \\
+           & MLP (latent, single-task) & 0.789 & 0.205 \\
+           & MLP (joint)               & 0.789 & 0.191 \\
+    \hline
+  \end{tabular}
+\end{table}
+
+The baseline MLP beats sparse logistic regression on AUC in each fold of every cohort (CRC $+0.101$, $p=6\times10^{-5}$;
+IBD $+0.084$, $p=4\times10^{-4}$; GvHD $+0.164$, $p<10^{-4}$; Table~\ref{tab:perf-y}), indicating that the
+$y$ signal in the pair representation is not linearly separable. The individual folds behind
+Table~\ref{tab:perf-y} are listed in Table~\ref{tab:app-fold-y} and drawn in
+Figures~\ref{fig:app-fold-y-auc} and~\ref{fig:app-fold-y-ap}. AP reinforces the outcome as well. The AP gap is significant in CRC ($p=4\times10^{-4}$)
+and GvHD ($p=2\times10^{-5}$) but not in IBD ($p=0.078$), where sparse logistic's ranking of the top candidates
+is closer to the nonlinear models' than its AUC alone suggests.
+
+Against XGBoost, the MLP shows no AUC difference in any cohort (CRC $p=0.80$; IBD $p=0.13$; GvHD $p=0.52$).
+However, in GvHD, the MLP beats XGBoost on AP ($+0.054$, $p=0.027$), meaning the two models rank the full set
+equally well but the MLP places the highest-confidence pairs more accurately.
+
+The joint model leaves $y$ AUC unchanged in every cohort (CRC $p=0.55$; IBD $p=0.25$; GvHD $p=0.99$).
+However, AP in IBD shows a small significant drop ($-0.014$, $p=0.022$), while CRC and GvHD show no
+difference ($p=0.40$, $p=0.47$). Therefore, the second head added for $w_{\text{class}}$ does not increase $y$ task
+prediction, and in fact hurts it slightly in IBD.
+
+\FloatBarrier
+\subsubsection{$w_{\text{reg}}$}
+\label{res:main-wreg}
+
+\begin{table}[H]
+  \centering
+  \caption{Test $R^2$ on $w_{\text{reg}}$}
+  \label{tab:perf-wreg}
+  \begin{tabular}{llr}
+    \hline
+    Cohort & Model              & $R^2$   \\
+    \hline
+    CRC    & Ridge regression   & $-0.156$ \\
+           & XGBoost            & $-0.154$ \\
+           & MLP                & $-0.141$ \\
+    \hline
+    IBD    & Ridge regression   & $-0.153$ \\
+           & XGBoost            & $-0.145$ \\
+           & MLP                & $-0.123$ \\
+    \hline
+    GvHD   & Ridge regression   & $-0.172$ \\
+           & XGBoost            & $-0.180$ \\
+           & MLP                & $-0.144$ \\
+    \hline
+  \end{tabular}
+\end{table}
+
+$R^2$ is negative for every model in every cohort (Table~\ref{tab:perf-wreg}), meaning each model
+performs worse than predicting the mean, and no individual fold of any model reaches zero
+(Table~\ref{tab:app-fold-wreg}, Figure~\ref{fig:app-fold-wreg}). This is why we binarise $W$ into
+$w_{\text{class}}$, evaluated next.
+
+\subsubsection{$w_{\text{class}}$}
+\label{res:main-wclass}
+
+\begin{table}[htbp]
+  \centering
+  \caption{Test performance on $w_{\text{class}}$; the latent single-task MLP equals the baseline MLP in every fold}
+  \label{tab:perf-wclass}
+  \begin{tabular}{llrr}
+    \hline
+    Cohort & Model                     & AUC   & AP    \\
+    \hline
+    CRC    & Sparse logistic           & 0.587 & 0.502 \\
+           & XGBoost                   & 0.579 & 0.492 \\
+           & MLP (baseline)            & 0.551 & 0.473 \\
+           & MLP (latent, single-task) & 0.551 & 0.473 \\
+           & MLP (joint)               & 0.575 & 0.496 \\
+    \hline
+    IBD    & Sparse logistic           & 0.579 & 0.450 \\
+           & XGBoost                   & 0.576 & 0.450 \\
+           & MLP (baseline)            & 0.607 & 0.478 \\
+           & MLP (latent, single-task) & 0.607 & 0.478 \\
+           & MLP (joint)               & 0.608 & 0.475 \\
+    \hline
+    GvHD   & Sparse logistic           & 0.601 & 0.587 \\
+           & XGBoost                   & 0.590 & 0.572 \\
+           & MLP (baseline)            & 0.596 & 0.577 \\
+           & MLP (latent, single-task) & 0.596 & 0.577 \\
+           & MLP (joint)               & 0.601 & 0.587 \\
+    \hline
+  \end{tabular}
+\end{table}
+
+Every model in every cohort sits between 0.551 and 0.608 AUC (Table~\ref{tab:perf-wclass}; per-fold
+values in Table~\ref{tab:app-fold-wclass}, distributions in Figures~\ref{fig:app-fold-wclass-auc}
+and~\ref{fig:app-fold-wclass-ap}). That range sits far
+lower than $y$'s. Unlike $y$, added model capacity does not consistently help: the baseline MLP
+is significantly \emph{worse} than sparse logistic in CRC on both AUC ($-0.036$, $p=4\times10^{-4}$) and
+AP ($-0.029$, $p=1\times10^{-4}$), significantly \emph{better} in IBD (AUC $+0.028$, $p=0.013$; AP $+0.028$,
+$p=0.023$), and not clearly different in GvHD (AUC $-0.005$, $p=0.093$; AP $-0.009$, $p=0.018$). XGBoost never
+beats sparse logistic: it ties in CRC and IBD ($p\geq0.28$ on both metrics) and loses
+significantly in GvHD (AUC $p=0.005$; AP $p<10^{-4}$).
+
+The joint model outperforms the single-task MLP in two of the three cohorts: clearly in CRC ($+0.023$ AUC, 
+$p=0.002$) and more narrowly in GvHD ($+0.006$, $p=0.049$), with no difference in IBD ($+0.001$, $p=0.876$). 
+Against logistic regression, the joint model loses in CRC ($-0.012$, $p=0.005$) while beating it clearly in IBD 
+($+0.029$, $p=0.002$) and matching it in GvHD ($p=0.911$). Whether the CRC and GvHD gains over the single-task MLP 
+reflect structure genuinely shared with $y$, or only the regularising effect of training a second head, is tested 
+and discussed in the next subsection.
+
+\subsection{Joint training and the shuffled-Y control}
+\label{res:joint}
+To test whether the joint model's benefit to $w_{\text{class}}$ (Section~\ref{res:main-wclass}) reflects
+structure genuinely shared with $y$, or only the regularising effect of fitting a second head, we apply the
+control of Section~\ref{sec:shuffley}: we retrain the joint MLP with the $y$ labels permuted within each
+outer-fold training set, repeat this over five independent permutations, and evaluate both heads on the
+unpermuted test fold. If the $w_{\text{class}}$ gain
+survives even when $y$ carries no real signal, that gain cannot come from $y$ itself.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Shuffled-$y$ control: joint model performance, real vs permuted $y$ labels (differences: real $-$ permuted)}
+  \label{tab:shuffle-y}
+  \begin{tabular}{lllrr}
+    \hline
+    Cohort & Head               & $y$ labels & AUC   & AP    \\
+    \hline
+    CRC    & $y$                & Real       & 0.810 & 0.276 \\
+           &                    & Permuted   & 0.485 & 0.042 \\
+           & $w_{\text{class}}$ & Real       & 0.575 & 0.496 \\
+           &                    & Permuted   & 0.579 & 0.497 \\
+    \hline
+    IBD    & $y$                & Real       & 0.802 & 0.271 \\
+           &                    & Permuted   & 0.495 & 0.042 \\
+           & $w_{\text{class}}$ & Real       & 0.608 & 0.475 \\
+           &                    & Permuted   & 0.604 & 0.472 \\
+    \hline
+    GvHD   & $y$                & Real       & 0.789 & 0.191 \\
+           &                    & Permuted   & 0.484 & 0.026 \\
+           & $w_{\text{class}}$ & Real       & 0.601 & 0.587 \\
+           &                    & Permuted   & 0.602 & 0.587 \\
+    \hline
+  \end{tabular}
+\end{table}
+
+The permutation removes the intended signal from the $y$ head: performance collapses to chance in every
+cohort (AUC $0.484$--$0.495$ against $0.789$--$0.810$ with the real labels; AP $0.026$--$0.042$ against
+$0.191$--$0.276$; Table~\ref{tab:shuffle-y}), and the drop is significant throughout ($p<10^{-7}$ on AUC
+and $p\leq2\times10^{-4}$ on AP, all cohorts).
+
+In the $w_{\text{class}}$ task, permuting $y$ leaves its performance unchanged in IBD (AUC $+0.004$, $p=0.377$; 
+AP $+0.003$, $p=0.228$) and GvHD (AUC $-0.001$, $p=0.753$; AP $+0.000$, $p=0.994$). On the other hand, in the 
+CRC cohort, it produces a small but significant change in the opposite direction (AUC $-0.005$, $p=0.022$; AP not 
+significant, $p=0.828$). With real labels the model does very slightly \emph{worse} on
+$w_{\text{class}}$ than with permuted ones. In no cohort does permuting $y$ significantly reduce
+$w_{\text{class}}$ performance. The advantage the joint model holds over the single-task MLP in CRC and
+GvHD (Section~\ref{res:main-wclass}) is reproduced in full by the permuted model, which reaches $0.579$
+against $0.551$ in CRC and $0.602$ against $0.596$ in GvHD; in IBD there was no advantage to account for.
+Since that advantage survives destroying $y$'s real
+content entirely, it is not explained by structure shared between $y$ and $w_{\text{class}}$;
+it is consistent with the plain regularising effect of fitting a second head, regardless of what that
+head predicts.

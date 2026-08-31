@@ -99,7 +99,7 @@ local({
     theme(legend.position = "right")
 
   ggsave(file.path(out, "arm_ladder.png"), p,
-         width = 5.2 * length(unique(summ$task)), height = 4.6, dpi = 150)
+         width = 3.8 * length(unique(summ$task)), height = 3.6, dpi = 150)
   message(sprintf("[plot_analyses:ablation] wrote %s", file.path(out, "arm_ladder.png")))
 
   # 2. Anchor check — the pre-committed switching rule, printed not plotted
@@ -156,7 +156,7 @@ local({
       theme(legend.position = "right")
 
     ggsave(file.path(out, "family_vs_genus.png"), pf,
-           width = 5.2 * length(unique(bars$task)), height = 4.6, dpi = 150)
+           width = 3.8 * length(unique(bars$task)), height = 3.6, dpi = 150)
     message(sprintf("[plot_analyses:ablation] wrote %s", file.path(out, "family_vs_genus.png")))
   }
 
@@ -215,7 +215,7 @@ local({
     labs(title = "AUC vs threshold W",
          x = "Threshold over W", y = "AUC", color = "model", fill = "model")
   message(sprintf("[plot_analyses:w_threshold] %s", peak_txt))
-  ggsave(file.path(out, "w_threshold_auc.png"), p, width = 8, height = 5, dpi = 150)
+  ggsave(file.path(out, "w_threshold_auc.png"), p, width = 6, height = 3.9, dpi = 150)
   write_csv(agg, file.path(out, "w_threshold_auc_summary.csv"))
   message(sprintf("[plot_analyses:w_threshold] wrote %s", file.path(out, "w_threshold_auc.png")))
 })
@@ -273,7 +273,7 @@ local({
                        inherit.aes = FALSE, size = 3.2)
   }
 
-  ggsave(file.path(out, "real_vs_permuted.png"), p, width = 8, height = 5, dpi = 150)
+  ggsave(file.path(out, "real_vs_permuted.png"), p, width = 6, height = 3.9, dpi = 150)
   message(sprintf("[plot_analyses:shuffle] wrote %s",
                   file.path(out, "real_vs_permuted.png")))
 })
