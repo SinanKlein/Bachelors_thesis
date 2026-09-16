@@ -1,0 +1,11 @@
+[plot_analyses] dataset=IBD_outputs run=20260916_152830
+[plot_analyses:w_threshold] l2_logistic peak AUC=0.567 @ t=0.18   |   xgboost peak AUC=0.592 @ t=0.91
+[plot_analyses:w_threshold] wrote /home/sinan/results/IBD_outputs/20260916_152830/plots/w_threshold/w_threshold_auc.png
+[plot_analyses:shuffle] wrote /home/sinan/results/IBD_outputs/20260916_152830/plots/shuffle_probe/real_vs_permuted.png
+[plot_analyses:stability] wrote /home/sinan/results/IBD_outputs/20260916_152830/plots/stability/stability_selection.png
+[plot_analyses:stability] plain              0 feature(s) with prob >= 0.80
+[plot_analyses:lambda] wrote /home/sinan/results/IBD_outputs/20260916_152830/plots/lambda_cv/lambda_cv_curve.png
+[plot_analyses:lambda] wrote /home/sinan/results/IBD_outputs/20260916_152830/plots/lambda_cv/lambda_cv_choice.png
+[plot_analyses:lambda] y        chosen ratio min=0.652 max=1.000 | at the grid maximum in 9/10 folds
+[plot_analyses:lambda] w_class  chosen ratio min=0.277 max=0.652 | at the grid maximum in 0/10 folds
+[plot_analyses] done.

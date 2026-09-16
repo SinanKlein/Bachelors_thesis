@@ -1,307 +1,448 @@
+\subsection{Problem Setup}
 
-\subsection{Overview}
-\label{sec:overview}
-This chapter describes how the grid of Section~\ref{data} is turned into a prediction problem, and what is
-fitted on it. The same steps are applied to each of the three cohorts separately, since the cohorts do not
-share a feature vocabulary.
+Let \(G=(\mathcal{B},\mathcal{V},E)\) be a bipartite graph with disjoint node sets
+\(\mathcal{B}=\{b_1,\ldots,b_n\}\) and \(\mathcal{V}=\{v_1,\ldots,v_m\}\). Two networks are defined over
+these node sets and built from different evidence: a binary network \(Y\in\{0,1\}^{n\times m}\) and a
+weighted network \(W\in[0,1]^{n\times m}\). Each pair \((b_i,v_j)\) carries a feature vector
+\(z_{ij}\in\mathbb{R}^{d}\).
 
-Of the four matrices of Section~\ref{data}, $Y$ and $W$ supply the prediction targets $y$, $w_{\text{reg}}$ and
-$w_{\text{class}}$, while $X_b$ and $X_v$ supply the features. Since the observation mask $M$ restricts $W$ to a
-block of the full grid, we take all three targets on the pairs inside that block. This ensures that each model
-is fitted and evaluated on the same pairs.
+The first model treats the two networks separately and conditions on the pair features. For each
+network the conditional expectation given the features are,
+\begin{equation}\label{eq:condmodels}
+ \mu_{Y}(z)=\mathbb{E}\!\left[Y_{ij}\mid z_{ij}=z\right],
+ \qquad
+ \mu_{W}(z)=\mathbb{E}\!\left[W_{ij}\mid z_{ij}=z\right].
+\end{equation}
+We estimate each conditional expectation within a model class and test it on pairs held out from
+fitting.
 
-The protein features are not used in raw form. First, we reduce $X_b$ and $X_v$ to a common set of
-protein clusters, then transform the remaining entries and finally combine the genus profile with the vOTU profile
-into a single vector describing their pair. Each of the three steps is a choice rather than a necessity,
-and we return to them for further details in Section~\ref{sec:features}.
+The second model is a joint prediction model where both networks are predicted from one representation of the same features,
+\begin{equation}\label{eq:jointmodel}
+ z_{ij}\;\longmapsto\;H_{ij}=h(z_{ij})\;\longmapsto\;\bigl(\widehat Y_{ij},\,\widehat W_{ij}\bigr),
+ \qquad H_{ij}\in\mathbb{R}^{r},\quad r<d.
+\end{equation}
+The question is whether such a shared representation exists: whether the joint model matches the
+separate ones in accuracy, and whether the representation it fits is common to both networks rather
+than the one a single network induces on its own.
 
-Next, we divide the pairs into ten stratified folds. We fit each model on the training set and evaluate on the
-held-out test set. The models we fit are a sparse logistic regression, a ridge regression, gradient-boosted
-trees, a single-task neural network for each target, and a joint network that predicts $y$ and
-$w_{\text{class}}$ from one shared representation. Since all of them are fitted on the same folds, they can be
-compared fold by fold rather than only on average.
+\subsection{General Analysis Pipeline}
+\label{sec:pipeline}
 
-Two groups of analyses follow. The first asks whether the results depend on how the features were built, on
-where the glasso values were thresholded, or on the taxonomic level at which the predictions are read. The
-second asks what the shared representation of the joint model contributes. How the pipeline was configured and
-run is described in Section~\ref{setup}.
+The two node sets of the bipartite graph carry their own features:
+\(X^{b}\in\mathbb{R}^{n\times d_b}\) holds the feature vectors of the nodes in \(\mathcal{B}\), one per
+row, and \(X^{v}\in\mathbb{R}^{m\times d_v}\) those of the nodes in \(\mathcal{V}\). Write \(x^{b}_{i}\)
+and \(x^{v}_{j}\) for the rows belonging to \(b_i\) and \(v_j\).
 
-\subsection{Task definitions}
-\label{sec:tasks}
-The three targets of Section~\ref{data} enter the pipeline as three separate prediction problems, in which a pair
-is described by the same feature vector throughout. Two of them are binary classifications and one a continuous
-regression. In $y$ we predict whether genus $i$ and vOTU $j$ are linked by a CRISPR spacer, and in
-$w_{\text{class}}$ whether the glasso edge between them was selected in at least one subsample. In
-$w_{\text{reg}}$ we predict the selection frequency $W_{ij}$ directly, so that the model is asked for the value
-of the interaction and not only for whether it exceeds zero.
+A transformation \(\varphi:\mathbb{R}^{d_b}\times\mathbb{R}^{d_v}\to\mathbb{R}^{d}\) maps the two node
+vectors of a pair to a single pair vector,
+\begin{equation}\label{eq:pairfeature}
+ z_{ij}=\varphi\!\left(x^{b}_{i},x^{v}_{j}\right)\in\mathbb{R}^{d},
+\end{equation}
 
-Since $W_{ij}$ is bounded between zero and one, nothing prevents the model from predicting a value outside that
-range. Therefore, we clip the target away from the two endpoints, take its logit, and fit the regression on the
-result. The predictions are transformed back to the original scale before any metric is computed, so the
-reported $R^2$ refers to the original scale of $W$ and not to the logit scale on which the model was fitted.
+Every pair \((i,j)\) in \(\mathcal{P}=\{1,\ldots,n\}\times\{1,\ldots,m\}\) therefore has a feature vector
+\(z_{ij}\) and the two edge values \(Y_{ij}\) and \(W_{ij}\). Stacking over the \(nm\) pairs gives a design
+matrix \(Z\in\mathbb{R}^{nm\times d}\) with one row per pair, together with the two networks vectorised into vectors of length
+\(nm\).
 
-\subsection{Feature representation}
-\label{sec:features}
+The problem is then to find mappings from a row of \(Z\) to each edge value, and one mapping that produces both
+from a single representation of that row. Figure~\ref{fig:setup} shows the construction.
 
-\subsubsection{Building the pair vector}
-\label{sec:pairvector}
-It is not feasible to pass raw protein-cluster profiles to the model since they are highly zero-inflated and
-high dimensional. Thus, we reduce the two matrices before joining them since many entries carry zeroes with no
-information. We do the reduction in three steps. Each step is a choice with two settings: which columns are
-kept, what the kept entries are turned into, and how the genus profile and the vOTU profile are combined into a
-single vector. None of the three is a necessity.
-
-Selection ranks the columns of a matrix by their variance and keeps the highest
-(Figures~\ref{fig:app-meanvar} and~\ref{fig:app-featcounts}). The score is always computed on
-the raw counts and never on a transformed matrix, so the transform of the next step cannot change which clusters
-are kept and the two steps stay independent of each other. We keep the two sides at equal width: each viral
-cluster is kept and the bacterial matrix is cut to the same number by taking its $k$ columns of highest variance,
-with $k$ the viral width. As Section~\ref{data} describes, $X_b$ spans an order of magnitude more protein
-clusters than $X_v$ in every cohort, so the width of the pair vector is set by the viral side and most of the
-bacterial side is discarded. How much of it survives is therefore not a quantity we set, but a consequence of
-how many viral clusters a cohort contributes.
-
-We then reduce the kept entries to presence/absence, so that an entry states whether the organism carries at
-least one protein of that cluster and not how many it carries. The counts are discarded entirely.
-
-Finally, we join the viral and bacterial profiles by adding them position by position, so that the pair vector
-has the width of one side rather than of both. After the joining we have a vector with coordinates that are
-either zero, one or two. This is possible only because selection made the widths equal. Bacteria and viruses
-have separate protein-cluster vocabularies, which means that bacterial cluster $j$ and viral cluster $j$ are
-unrelated to each other and their sum is not a statement about one specific protein family being present in
-either partner. It is an architectural choice that halves the width of the pair vector and makes the model share
-one weight between the two sides.
-
-We did not fix these three settings in advance. Each was compared against its alternative before anything else
-was fitted, and Section~\ref{sec:ablation} describes that comparison and the rule by which the settings used
-here were selected. What is fitted on the resulting pair vectors is described in Section~\ref{sec:models}.
-
-\subsubsection{Selecting the representation}
-\label{sec:ablation}
-Section~\ref{sec:pairvector} describes one representation, but each of its three choices could have been taken
-differently, and a model reads a different pair vector under every combination of those settings. We call one
-such combination an arm. Therefore, before committing to a single arm, we first performed an ablation experiment
-to determine which arm performed best.
-
-The first choice is the preprocessing step that determines which protein features are filtered. Equal-width
-selection keeps each viral cluster and the same number of bacterial ones that explain the most variance. The
-alternative keeps a fixed fraction of each of the two protein-feature matrices, the top 2.5\% of $X_b$ and the
-top 10\% of $X_v$ by variance. This alternative leaves the bacterial half of the pair vector far wider than the
-viral half. The comparison asks whether that imbalance matters, since a model given many more bacterial than
-viral coordinates may favour the bacterial side for no reason other than its width.
-
-The second choice is what the kept entries become. Presence/absence records only whether a cluster occurs, while
-the centred log-ratio preserves how large a cluster is relative to the others in the same profile and is the
-usual treatment of compositional count data. The comparison asks whether the abundance of a protein cluster
-carries anything beyond its presence.
-
-The third choice is how the profiles are joined. Summation adds them position by position whereas a
-concatenation leaves each cluster its own coordinate and outputs a pair vector as wide as both sides together.
-The comparison asks what is lost by folding the two halves onto one another. Since a vector sum requires the two
-sides to have the same width, this choice is dependent on the first, and equal-width selection has to enter the
-ladder before summation.
-
-We compare the choices along a ladder of four arms rather than by analysing the full grid and also
-measuring the interaction between them. The ladder, listed in Table~\ref{tab:arms}, begins from the arm in which
-each choice takes the setting that was not adopted, and changes exactly one choice at each step until it arrives
-at the one used in this thesis. Because only one choice moves at a time, the difference between two neighbouring
-arms corresponds to the effect of that choice. During the ablation we use the same ten folds and the same
-baseline models as the main experiment. We evaluate and report the ablation on the $y$ and $w_{\text{class}}$
-tasks.
-
-\begin{table}[htbp]
+\begin{figure}[htbp]
   \centering
-  \caption{The four ablation arms}
-  \label{tab:arms}
-  \begin{tabular}{llll}
-    \hline
-    Arm & Transform          & Selection   & Combine \\
-    \hline
-    1   & centred log-ratio & quantile    & concatenation \\
-    2   & presence/absence   & quantile    & concatenation \\
-    3   & presence/absence   & equal width & concatenation \\
-    4   & presence/absence   & equal width & summation \\
-    \hline
-  \end{tabular}
-\end{table}
+  \begin{tikzpicture}[
+      x = 1cm, y = 1cm, font = \small,
+      mat/.style  = {draw = black!55, fill = black!4, line width = .4pt},
+      hi/.style   = {draw = black!55, fill = black!30, line width = .4pt},
+      gl/.style   = {black!22, line width = .3pt},
+      arr/.style  = {-{Stealth[length = 2.2mm]}, line width = .7pt},
+      dim/.style  = {font = \scriptsize, text = black!55, inner sep = 1.5pt},
+      note/.style = {font = \scriptsize, inner sep = 2pt},
+      stage/.style= {font = \footnotesize\itshape, anchor = west, text = black!75}
+    ]
+
+  % ---------- (a) node features ----------------------------------------
+  \node[stage] at (0,3.55) {(a) node features};
+
+  \draw[mat] (1.5,2.50) rectangle (4.0,3.05);
+  \draw[hi]  (1.5,2.68) rectangle (4.0,2.80);
+    \node[dim, left]   at (1.40,2.74) {$x^{b}_{i}$};
+    \node[dim, above]  at (2.75,3.08) {$d_b$};
+    \node[note, below] at (2.75,2.44) {$X^{b}\in\mathbb{R}^{n\times d_b}$};
+
+  \draw[mat] (1.5,0.70) rectangle (4.4,1.55);
+  \draw[hi]  (1.5,1.00) rectangle (4.4,1.12);
+    \node[dim, left]   at (1.40,1.06) {$x^{v}_{j}$};
+    \node[dim, above]  at (2.95,1.58) {$d_v$};
+    \node[note, below] at (2.95,0.64) {$X^{v}\in\mathbb{R}^{m\times d_v}$};
+
+  % ---------- (b) the transformation -----------------------------------
+  \node[stage] at (6.5,3.55) {(b) one pair};
+
+  \draw[arr] (4.15,2.74) -- (6.60,2.20);
+  \draw[arr] (4.55,1.06) -- (6.60,1.70);
+  \draw[mat, draw = black!55] (6.95,1.55) rectangle (8.15,2.35);
+  \node[note] at (7.55,1.95) {$\varphi$};
+
+  \draw[arr] (8.30,1.95) -- (9.20,1.95);
+  \draw[hi] (9.40,1.89) rectangle (12.5,2.01);
+    \node[note, right] at (12.6,1.95) {$z_{ij}\in\mathbb{R}^{d}$};
+  \node[note] at (10.95,1.30) {$z_{ij}=\varphi\!\left(x^{b}_{i},x^{v}_{j}\right)$};
+
+  % ---------- (c) design matrix ----------------------------------------
+  \node[stage] at (0,-0.35) {(c) one row per pair};
+
+  \draw[mat] (1.6,-3.30) rectangle (5.5,-0.90);
+  \foreach \y in {-1.30,-1.70,...,-2.95} \draw[gl] (1.6,\y) -- (5.5,\y);
+  \foreach \x in {2.05,2.50,...,5.20} \draw[gl] (\x,-3.30) -- (\x,-0.90);
+  \draw[hi] (1.6,-2.50) rectangle (5.5,-2.10);
+    \node[dim, above] at (3.55,-0.87) {$d$ columns};
+    \node[dim, left]  at (1.50,-1.10) {$(1,1)$};
+    \node[dim, left]  at (1.50,-1.50) {$(1,2)$};
+    \node[dim, left]  at (1.50,-1.90) {$\vdots$};
+    \node[dim, left]  at (1.50,-2.30) {$(i,j)$};
+    \node[dim, left]  at (1.50,-2.70) {$\vdots$};
+    \node[dim, left]  at (1.50,-3.10) {$(n,m)$};
+  \node[note, align = center] at (3.55,-3.72)
+        {$Z\in\mathbb{R}^{nm\times d}$\\[1pt] row $(i,j)$ is $z_{ij}$};
+
+  \draw[mat] (5.75,-3.30) rectangle (6.10,-0.90);
+    \node[dim, above] at (5.92,-0.87) {$y$};
+  \draw[hi] (5.75,-2.50) rectangle (6.10,-2.10);
+  \draw[mat] (6.35,-3.30) rectangle (6.70,-0.90);
+    \node[dim, above] at (6.52,-0.87) {$w$};
+  \draw[hi] (6.35,-2.50) rectangle (6.70,-2.10);
+  \node[note] at (6.22,-3.62) {edge values};
+
+  % ---------- (d) models ------------------------------------------------
+  \node[stage] at (7.35,-0.35) {(d) models};
+
+  \draw[arr] (6.90,-2.30) -- (7.70,-2.30);
+  \node[mat, draw = black!55, align = left, inner sep = 5pt, font = \scriptsize]
+        at (9.15,-2.30)
+        {penalised linear\\ boosted trees\\ neural network\\[2pt] joint model};
+  \draw[arr] (10.60,-2.30) -- (11.40,-2.30);
+
+  \draw[mat] (11.60,-3.30) rectangle (11.95,-0.90);
+  \draw[hi]  (11.60,-2.50) rectangle (11.95,-2.10);
+    \node[note, below, align = center] at (11.77,-3.36) {fitted\\ values};
+
+  \end{tikzpicture}
+  \caption[Construction of the prediction problem]{Construction of the prediction problem. Each node
+  carries a feature vector. For a pair \((b_i,v_j)\) the transformation \(\varphi\) combines the two node
+  vectors into one pair vector \(z_{ij}\). Every pair contributes one row of the design matrix \(Z\), whose
+  \(d\) columns are the coordinates of \(\varphi\); the two edge values are aligned with those rows. Each
+  model maps a row to one fitted value.}
+  \label{fig:setup}
+\end{figure}
+\FloatBarrier
+
 
 \subsection{Models}
 \label{sec:models}
 
-\subsubsection{Baselines}
-\label{sec:baselines}
-As baselines we fit a sparse logistic regression to quantify the linearly learnable structure of the two
-classification tasks, a ridge regression to quantify it for the regression task, and gradient-boosted trees as
-well as a neural network to quantify the nonlinearly learnable structure of both. Gradient-boosted trees carry a
-second role, since they are among the strongest general-purpose predictors on tabular data
-\citep{chen2016,grinsztajn2022}, meaning they also serve as a demanding reference against which the neural
-models are read.
+\subsubsection{Baseline Models}
 
-Throughout, $x_i \in \mathbb{R}^{d}$ is the pair vector of Section~\ref{sec:pairvector}, $t_i$ its label on the
-task at hand and $n$ the number of pairs in the training partition of a fold. We fit every model except the
-gradient-boosted trees on the standardised pair vector $\tilde{x}_i$, scale and standardize on the training partition
-because a tree is unaffected by a monotone rescaling of a coordinate.
-
-The sparse logistic regression models the log-odds of the label as a linear function of the pair vector,
-penalised in $L_1$ norm,
-%
-\begin{equation}
-  \label{eq:sparselogistic}
-  \hat{\beta} = \arg\min_{\beta} \left\{ -C \sum_{i=1}^{n} c_i \left[ t_i \log p_i + (1 - t_i) \log(1 - p_i)
-  \right] + \|\beta\|_1 \right\} , \qquad p_i = \sigma(\beta_0 + \beta^{\top} \tilde{x}_i) ,
+Every model maps one row \(z_{ij}\in\mathbb{R}^{d}\) to one value, and is fitted on a training index set
+\(\mathcal{T}\subset\mathcal{P}\) and evaluated on \(\mathcal{P}\setminus\mathcal{T}\). For a binary edge value \(T_{ij}\in\{0,1\}\) the output is a fitted probability
+\(\widehat p_{ij}\in(0,1)\); since the positive class is rare, each observation is weighted inversely to
+the frequency of its class in \(\mathcal{T}\), giving weights \(\omega_{ij}>0\) and the weighted
+cross-entropy
+\begin{equation}\label{eq:bce}
+ \ell(\theta)=-\sum_{(i,j)\in\mathcal{T}}\omega_{ij}
+ \Bigl[T_{ij}\log\widehat p_{ij}(\theta)+\bigl(1-T_{ij}\bigr)\log\bigl(1-\widehat p_{ij}(\theta)\bigr)\Bigr].
 \end{equation}
-%
-with $\sigma(z) = (1 + e^{-z})^{-1}$ the logistic function. The $L_1$ penalty sets most coefficients to exactly
-zero, so the fitted model rests on a small number of coordinates instead of spreading weight over all of them.
-The weights $c_i$ are inversely proportional to the frequency of the class of pair $i$, which keeps the rare
-positives from being outweighed by the negatives.
-
-For the regression task $w_{\text{reg}}$, we fit a ridge regression, where $t_i$ is the transformed target of
-Section~\ref{sec:tasks}. Instead of cross-entropy and an $L_1$ penalty, we use squared error and an $L_2$
-penalty,
-%
-\begin{equation}
-  \label{eq:ridge}
-  \hat{\beta} = \arg\min_{\beta} \left\{ \sum_{i=1}^{n} \left( t_i - \beta_0 - \beta^{\top} \tilde{x}_i \right)^{2}
-  + \alpha \|\beta\|_2^{2} \right\} .
+For a continuous edge value \(\widetilde W_{ij}\in\mathbb{R}\) the output \(\widehat{\widetilde W}_{ij}\) is
+on the same scale and the criterion is the sum of squared errors
+\begin{equation}\label{eq:sse}
+ \mathrm{SSE}(\theta)=\sum_{(i,j)\in\mathcal{T}}
+ \bigl(\widetilde W_{ij}-\widehat{\widetilde W}_{ij}(\theta)\bigr)^{2}.
 \end{equation}
-%
-Unlike the $L_1$ penalty, the $L_2$ penalty shrinks the coefficients towards zero without setting any of them
-to it. This means that the fit keeps each of the coefficients and no selection takes place.
+We use three model families, each in a classification and a regression variant.
 
-The gradient-boosted trees build an additive model out of regression trees, fitted one after another,
-%
-\begin{equation}
-  \label{eq:gbt}
-  F_M(x) = F_0 + \nu \sum_{m=1}^{M} f_m(x) ,
+\begin{itemize}
+
+\item[--] \textbf{Penalised linear model.} For classification, \(L_{1}\)-penalised logistic regression
+\citep{tibshirani1996}: with \(\beta\in\mathbb{R}^{d}\), \(\beta_{0}\in\mathbb{R}\) and
+\(\sigma(u)=(1+e^{-u})^{-1}\), the output is \(\widehat p_{ij}=\sigma(\beta_{0}+z_{ij}^{\top}\beta)\) and
+\begin{equation}\label{eq:lasso}
+ \bigl(\widehat\beta_{0},\widehat\beta\bigr)
+ =\operatorname*{arg\,min}_{\beta_{0},\beta}
+ \Bigl\{\ell(\beta_{0},\beta)+\lambda\lVert\beta\rVert_{1}\Bigr\},
 \end{equation}
-%
-where each tree $f_m$ is fitted to the negative gradient of the loss at the current fit $F_{m-1}$ and scaled by
-a learning rate $\nu$, with $F_0$ a constant initial fit and $M$ the number of trees. Since a tree splits on one
-coordinate after another, the model can represent a response that depends on a combination of coordinates,
-which a linear function of those same coordinates cannot.
-
-The neural baseline is a network with a single hidden layer,
-%
-\begin{equation}
-  \label{eq:mlp}
-  h_i = \max\!\left(0,\; U_1 \tilde{x}_i + b_1\right) \in \mathbb{R}^{H} , \qquad
-  \eta_i = u_2^{\top} \delta(h_i) + b_2 , \qquad p_i = \sigma(\eta_i) ,
+and we select \(\lambda>0\) by an inner cross-validation on \(\mathcal{T}\) under the one-standard-error
+rule. The \(L_{1}\) penalty sets most of the \(d\) coefficients to exactly zero. For regression, ridge 
+regression \citep{hoerl1970}: the output is \(\widehat{\widetilde W}_{ij}=\beta_{0}+z_{ij}^{\top}\beta\) and
+\begin{equation}\label{eq:ridge}
+ \bigl(\widehat\beta_{0},\widehat\beta\bigr)
+ =\operatorname*{arg\,min}_{\beta_{0},\beta}
+ \Bigl\{\mathrm{SSE}(\beta_{0},\beta)+\alpha\lVert\beta\rVert_{2}^{2}\Bigr\},
+ \qquad \alpha>0.
 \end{equation}
-%
-with $U_1 \in \mathbb{R}^{H \times d}$ and $\delta$ dropping a random share of the hidden units during training
-and acting as the identity at test time. On the classification tasks we fit the network on a class weighted
-cross-entropy, in which the positive class is scaled by the inverse of its frequency in the training partition
-and the negative class is left unweighted. We reweight the gradient-boosted trees in the same way. On the
-regression task the output is $\eta_i$ itself and we fit on its squared error. For each task we fit a separate
-network with the same structure and hyperparameters.
 
-\subsubsection{Latent space models}
-\label{sec:joint}
-In order to test the claim of the thesis as stated in the introduction chapter, we now introduce latent space
-models. In a latent space model, we first map the input features to a latent representation $h_i$ with a neural
-network and then map that representation to the output with a single linear layer. The latent representation is
-the $h_i$ of~(\ref{eq:mlp}), taken before dropout, so that it is exactly the vector the linear layer reads at
-test time.
-
-During the pipeline we fit three different latent space models. The first two are single task latent space models
-where one is fitted on $y$ and one on $w_{\text{class}}$, such that each latent space model arranges its latent
-space for one single task. The third latent space model is a joint model fitted for both targets simultaneously.
-It keeps everything of~(\ref{eq:mlp}) before the output layer and replaces that single output by two, such that
-one latent representation feeds a head for $y$ and a head for $w_{\text{class}}$,
-%
-\begin{equation}
-  \label{eq:joint}
-  \eta_i^{y} = u_y^{\top} \delta(h_i) + b_y , \qquad \eta_i^{w} = u_w^{\top} \delta(h_i) + b_w ,
+\item[--] \textbf{Gradient-boosted trees.} The nonlinear tree model \citep{chen2016}, competitive on tabular feature
+spaces \citep{grinsztajn2022}. From a constant \(f_{0}\), regression trees
+\(\mathcal{T}_{t}:\mathbb{R}^{d}\to\mathbb{R}\) are fitted successively to the gradient of the criterion,
+giving
+\begin{equation}\label{eq:xgb}
+ f(z)=f_{0}+\eta\sum_{t=1}^{n_{\mathrm{tree}}}\mathcal{T}_{t}(z),
 \end{equation}
-%
-with $u_y$ and $u_w$ the weight vectors of the two heads and $b_y$ and $b_w$ their biases. Writing $\ell$ for the
-class-weighted cross-entropy of Section~\ref{sec:baselines} and $t_i^{y}$ and $t_i^{w}$ for the two labels of
-pair $i$, we fit the network on the sum of the two losses,
-%
-\begin{equation}
-  \label{eq:jointloss}
-  \mathcal{L} = \lambda_y \, \ell\!\left(\eta^{y}, t^{y}\right)
-              + \lambda_w \, \ell\!\left(\eta^{w}, t^{w}\right) ,
+with \(n_{\mathrm{tree}}\) trees and learning rate \(\eta\in(0,1]\). For classification the trees are fitted to the gradient 
+of the cross-entropy and the output is
+\(\widehat p_{ij}=\sigma(f(z_{ij}))\) whereas for regression to the gradient of the squared-error criterion
+and the output is \(\widehat{\widetilde W}_{ij}=f(z_{ij})\).
+
+\item[--] \textbf{Neural network.} A single hidden layer of width \(r\) \citep{Bishop2006}. With
+\(\Psi\in\mathbb{R}^{r\times d}\) and \(\psi\in\mathbb{R}^{r}\),
+\begin{equation}\label{eq:mlp}
+ H_{ij}=\mathrm{Drop}_{\rho}\!\Bigl(\mathrm{ReLU}\bigl(\Psi z_{ij}+\psi\bigr)\Bigr)\in\mathbb{R}^{r},
 \end{equation}
-%
-where we set $\lambda_y = \lambda_w = 1$, so that neither target is given priority over the other. Each head
-carries its own class weights, since the two targets differ in prevalence.
+where \(\mathrm{ReLU}(u)=\max(u,0)\) acts coordinatewise and \(\mathrm{Drop}_{\rho}\) zeroes each
+coordinate independently with probability \(\rho\) during fitting and is the identity at prediction time.
+A linear head with \(\phi\in\mathbb{R}^{r}\) and \(\phi_{0}\in\mathbb{R}\) follows: for classification
+\(\widehat p_{ij}=\sigma(\phi^{\top}H_{ij}+\phi_{0})\), minimising the cross-entropy; for regression
+\(\widehat{\widetilde W}_{ij}=\phi^{\top}H_{ij}+\phi_{0}\), minimising the squared-error criterion.
 
-Apart from the number of heads, the three latent space models are identical in structure and hyperparameters, so
-a comparison between them isolates the effect of fitting one latent space for two targets rather than for one.
-The regression task has no joint counterpart, since both heads are classifications.
+\end{itemize}
 
-\subsection{Evaluation protocol}
+
+
+
+
+\subsubsection{Latent-Space Model}
+
+The joint model uses the same hidden layer as the neural network above, but lets one representation feed
+two heads. With \(\Psi\in\mathbb{R}^{r\times d}\) and \(\psi\in\mathbb{R}^{r}\),
+\begin{equation}\label{eq:trunk}
+ H_{ij}=\mathrm{Drop}_{\rho}\!\Bigl(\mathrm{ReLU}\bigl(\Psi z_{ij}+\psi\bigr)\Bigr)\in\mathbb{R}^{r},
+\end{equation}
+and since \(r<d\) this layer is a bottleneck: the \(d\) coordinates of \(z_{ij}\) are compressed to \(r\)
+before either edge value is predicted. Two linear heads act on the same \(H_{ij}\),
+\begin{equation}\label{eq:heads}
+ \widehat p^{\,Y}_{ij}=\sigma\!\left(\phi_{Y}^{\top}H_{ij}+\phi_{0Y}\right),
+ \qquad
+ \widehat p^{\,W}_{ij}=\sigma\!\left(\phi_{W}^{\top}H_{ij}+\phi_{0W}\right),
+\end{equation}
+with \(\phi_{Y},\phi_{W}\in\mathbb{R}^{r}\) and \(\phi_{0Y},\phi_{0W}\in\mathbb{R}\).
+
+Both edge values are binary in this model, so each head is scored by the weighted binary cross-entropy.
+Writing \(T^{W}_{ij}\in\{0,1\}\) for the binarised edge weight and \(\theta\) for all parameters,
+\begin{equation}\label{eq:bceY}
+ \ell_{Y}(\theta)=-\sum_{(i,j)\in\mathcal{T}}\omega^{Y}_{ij}
+ \Bigl[\,Y_{ij}\log\widehat p^{\,Y}_{ij}
+ +\bigl(1-Y_{ij}\bigr)\log\bigl(1-\widehat p^{\,Y}_{ij}\bigr)\Bigr],
+\end{equation}
+\begin{equation}\label{eq:bceW}
+ \ell_{W}(\theta)=-\sum_{(i,j)\in\mathcal{T}}\omega^{W}_{ij}
+ \Bigl[\,T^{W}_{ij}\log\widehat p^{\,W}_{ij}
+ +\bigl(1-T^{W}_{ij}\bigr)\log\bigl(1-\widehat p^{\,W}_{ij}\bigr)\Bigr],
+\end{equation}
+where the weights \(\omega^{Y}_{ij}\) and \(\omega^{W}_{ij}\) are formed separately for each network, as
+above. We estimate all parameters by minimising the weighted sum
+\begin{equation}\label{eq:joint}
+ \mathcal{L}(\theta)=\gamma_{Y}\,\ell_{Y}(\theta)+\gamma_{W}\,\ell_{W}(\theta),
+ \qquad \gamma_{Y},\gamma_{W}>0.
+\end{equation}
+Both terms depend on \(\Psi\) and \(\psi\), so the hidden layer receives gradient contributions from both
+edge values and \(H_{ij}\) has to support both heads at once. The single-head neural network has the identical
+hidden layer and differs only in that the second term is absent, so comparing the two isolates the cost of
+sharing one representation. Figure~\ref{fig:latent} shows the model.
+
+
+\begin{figure}[htbp]
+  \centering
+  \resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+      x = 1cm, y = 1cm, font = \small,
+      bar/.style  = {draw = black!55, fill = black!6,  line width = .4pt},
+      hid/.style  = {draw = black!55, fill = black!22, line width = .4pt},
+      hdbox/.style= {draw = black!55, fill = black!38, line width = .4pt},
+      arr/.style  = {-{Stealth[length = 2.2mm]}, line width = .7pt},
+      grad/.style = {-{Stealth[length = 2mm]}, line width = .6pt, dashed, black!55},
+      dim/.style  = {font = \scriptsize, text = black!55, inner sep = 1.5pt},
+      note/.style = {font = \scriptsize, inner sep = 2pt}
+    ]
+
+  % input ---------------------------------------------------------------
+  \draw[bar] (0,-2.10) rectangle (0.55,2.10);
+    \node[dim, rotate = 90] at (-0.32,0) {$d$};
+    \node[note, below] at (0.27,-2.20) {$z_{ij}$};
+
+  % trunk ---------------------------------------------------------------
+  \draw[arr] (0.80,0) -- (3.20,0);
+    \node[dim, align = center] at (2.00,0.80)
+          {$\Psi\in\mathbb{R}^{r\times d},\ \ \psi\in\mathbb{R}^{r}$};
+    \node[dim, align = center] at (2.00,0.40) {$\mathrm{ReLU}$, then dropout};
+
+  % shared representation ------------------------------------------------
+  \draw[hid] (3.45,-0.75) rectangle (4.00,0.75);
+    \node[dim, rotate = 90] at (3.18,0) {$r$};
+    \node[note, below, align = center] at (3.72,-0.85) {$H_{ij}$};
+
+  % two heads ----------------------------------------------------------
+  \draw[arr] (4.25,0.32) -- (6.30,1.55);
+    \node[dim] at (5.00,1.32) {$\phi_{Y},\,\phi_{0Y}$};
+  \draw[arr] (4.25,-0.32) -- (6.30,-1.55);
+    \node[dim] at (5.00,-1.32) {$\phi_{W},\,\phi_{0W}$};
+
+  \draw[hdbox] (6.50,1.48) rectangle (6.80,1.78);
+  \draw[hdbox] (6.50,-1.78) rectangle (6.80,-1.48);
+
+  \node[note, right] at (7.00,1.63)
+        {$\widehat p^{\,Y}_{ij}=\sigma\!\left(\phi_{Y}^{\top}H_{ij}+\phi_{0Y}\right)$};
+  \node[note, right] at (7.00,-1.63)
+        {$\widehat p^{\,W}_{ij}=\sigma\!\left(\phi_{W}^{\top}H_{ij}+\phi_{0W}\right)$};
+
+  % losses -----------------------------------------------------------------
+  \draw[arr] (11.55,1.63) -- (12.25,1.63);
+  \draw[arr] (11.55,-1.63) -- (12.25,-1.63);
+  \node[note, draw = black!45, fill = black!3, inner sep = 4pt] (ly) at (13.05,1.63)
+        {$\ell_{Y}$};
+  \node[note, draw = black!45, fill = black!3, inner sep = 4pt] (lw) at (13.05,-1.63)
+        {$\ell_{W}$};
+  \node[dim, right] at (13.45,1.63) {weighted BCE against $Y_{ij}$};
+  \node[dim, right] at (13.45,-1.63) {weighted BCE against $T^{W}_{ij}$};
+
+  \node[note, draw = black!45, fill = black!3, inner sep = 4pt] (loss) at (13.05,0)
+        {$\mathcal{L}=\gamma_{Y}\,\ell_{Y}+\gamma_{W}\,\ell_{W}$};
+  \draw[grad] (ly.south) -- (loss.north);
+  \draw[grad] (lw.north) -- (loss.south);
+
+  % shared gradient ----------------------------------------------------------
+  \draw[grad] (loss.west) -- (11.30,0) -- (11.30,-2.90) -- (2.00,-2.90) -- (2.00,-0.20);
+    \node[dim, above] at (6.65,-2.87) {both losses update the shared $\Psi,\psi$};
+
+  \end{tikzpicture}%
+}
+  \caption[The shared-representation model]{The shared-representation model. A single hidden layer maps the
+  pair vector \(z_{ij}\in\mathbb{R}^{d}\) to a representation \(H_{ij}\in\mathbb{R}^{r}\) with \(r<d\).
+  Two linear heads act on the same \(H_{ij}\) and produce one probability each. Both are scored by a
+  weighted binary cross-entropy, and the weighted sum of the two is minimised, so the hidden layer receives
+  gradient contributions from both edge values.}
+  \label{fig:latent}
+\end{figure}
+\FloatBarrier
+
+\subsection{Training and Evaluation}
 \label{sec:eval}
-We evaluate each model by ten-fold cross-validation over the pairs, stratified on the $y$ label, so that each
-pair lies in the test partition exactly once. Each model, task and ablation arm of a cohort uses the same ten
-folds, which means any two models can be compared fold by fold rather than only on their averages. We stratify
-on $y$ throughout, since one shared set of folds is what makes the tasks comparable and $y$ is the rarer of the
-two binary targets.
 
-The folds are drawn over pairs and not over organisms, so every genus and every vOTU appears in both partitions
-and only their combination is new at test time. The evaluation is in this sense transductive and does not
-describe how a model would behave on an organism it has never seen.
+We partition the pairs \(\mathcal{P}\) once, before fitting any model, into \(F=10\) folds
+\(\mathcal{P}_{1},\dots,\mathcal{P}_{F}\) of approximately equal size, stratified on \(Y\) and drawn from
+a fixed seed. We fit each model on \(\mathcal{P}\setminus\mathcal{P}_{f}\) and score it on
+\(\mathcal{P}_{f}\) for \(f=1,\dots,F\), and every model sees the identical partition. We centre and
+scale each coordinate of \(Z\) using the mean and standard deviation of the training fold, except for the
+tree ensembles, whose splits are invariant to monotone rescaling of a coordinate.
 
-On the binary tasks, we report the AUC score together with the average precision, since at the positive rates
-of Table~\ref{tab:descriptives} the first does not distinguish a good ranking overall from one whose top is
-mostly wrong. On the regression task, we report $R^2$ on the original scale of $W$.
+For the binary edge values we report the area under the receiver operating characteristic curve (AUC) and the
+average precision (AP), the latter being the more informative of the two under strong class imbalance
+\citep{davis2006}. Both are rank-based, so no decision threshold is applied to \(\widehat p_{ij}\). For
+the weighted network we report the coefficient of determination on the original \([0,1]\) scale,
+\begin{equation}\label{eq:r2}
+ R^{2}_{f}
+ =1-\frac{\sum_{(i,j)\in\mathcal{P}_{f}}\bigl(W_{ij}-\widehat W_{ij}\bigr)^{2}}
+     {\sum_{(i,j)\in\mathcal{P}_{f}}\bigl(W_{ij}-\bar W_{f}\bigr)^{2}},
+ \qquad
+ \bar W_{f}=\frac{1}{|\mathcal{P}_{f}|}\sum_{(i,j)\in\mathcal{P}_{f}}W_{ij},
+\end{equation}
+so that \(R^{2}_{f}<0\) means the fitted values are worse on fold \(f\) than the constant prediction
+\(\bar W_{f}\). We report every metric as a mean and a standard deviation over the \(F\) held-out folds. Two models are
+compared by the mean of their per-fold differences and, where the consistency of a difference matters, by
+the number of folds favouring each model. The training sets of different folds overlap, so a paired test
+over the \(F\) differences has no unbiased variance estimator and its \(p\)-values would be
+anti-conservative \citep{bengio2004}; we therefore report the differences themselves rather than a test.
 
-Since every model of a cohort sees the same ten folds, we compare two models by pairing their
-per-fold test scores and reporting the $p$-value of a two-sided paired $t$-test over the ten
-differences. These $p$-values are descriptive. Any two of the ten training partitions share most
-of their pairs, so the differences are not independent, and there is no unbiased estimator of the
-variance of a cross-validated score \citep{bengio2004}. The variance is therefore underestimated
-and the test is anti-conservative. We also report many comparisons without correcting for their
-number. We do not read a small $p$-value as evidence against a null hypothesis or as a proper tool
-of statistical inference, but only as a difference that holds in fold after fold.
+\subsection{Representation Comparison}
+\label{sec:cka}
 
-\subsection{Robustness analyses}
+Each of the three neural networks produces a hidden layer of width \(r\): write \(H^{Y}_{ij}\) and
+\(H^{W}_{ij}\) for the layer of the single-head neural network fitted to \(Y\) and to the binarised edge
+weight, and \(H^{YW}_{ij}\) for the shared layer of the joint model. Their coordinates cannot be
+compared one by one, since an orthogonal transformation of a hidden layer together with a compensating
+change of its head leaves every fitted value unchanged. What can be compared is the geometry each layer
+induces on the pairs.
+
+Let \(A\) and \(B\) hold two such layers evaluated on the same \(q\) pairs, stacked column-centred into
+\(\mathbb{R}^{q\times r}\). Their linear centred kernel alignment \citep{kornblith2019} is
+\begin{equation}\label{eq:cka}
+ \operatorname{CKA}(A,B)
+ =\frac{\bigl\lVert A^{\top}B\bigr\rVert_{F}^{2}}
+       {\bigl\lVert A^{\top}A\bigr\rVert_{F}\,\bigl\lVert B^{\top}B\bigr\rVert_{F}}
+ \;\in\;[0,1],
+\end{equation}
+which equals one when the two layers differ by an orthogonal transformation and a common scaling and is
+invariant to both. It is not invariant to rescaling single coordinates, so we scale each coordinate to unit
+variance before the comparison; otherwise a hidden unit with large activations would dominate the
+alignment for no reason beyond its scale.
+
+Every fold refits each neural network, so layers from different folds are not the same map and we do not
+pool them. We compute the three pairwise values within each held-out fold \(\mathcal{P}_{f}\) and report
+them as a mean and a standard deviation over the \(F\) folds.
+
+\subsection{Robustness Analyses}
 \label{sec:robustness}
-Two further analyses ask whether the $w_{\text{class}}$ result reflects the target or the way we defined it. The
-first varies where the continuous $W$ is cut, and the second varies the taxonomic level at which the predictions
-are read. Either could have produced a target that is easier to predict than the one of
-Section~\ref{sec:tasks}, and each holds everything else fixed, so that a difference can be attributed to the
-choice that moved.
 
-\subsubsection{Binarisation threshold}
-\label{sec:wthreshold}
-Section~\ref{sec:tasks} defines $w_{\text{class}}$ by thresholding $W$ at zero, which admits every pair selected
-in at least one of the fifty subsamples. A stricter cut would define a different target and therefore may change the
-prediction quality. In order to determine which cut yields a $w_{\text{class}}$ with a better prediction quality,
-we repeat the classification task at ten evenly spaced thresholds inside $(0,1)$, refitting at each on the label
-$\mathbf{1}[W_{ij} > t]$. At each threshold, we fit an $L_2$-penalised logistic regression ($C = 1.0$) and gradient-boosted
-trees, so that the answer does not rest on one model. The reason why we fit the regression with an $L_2$ penalty
-rather than an $L_1$ is that the $L_1$ is too slow on a CPU laptop and starts to become a bottleneck in this
-task which would make the pipeline infeasible on it.
+We report two further analyses. The first asks whether a gain of the joint model on one network depends on information carried by the other; the second asks whether the
+coordinates selected by the penalised linear model are stable under resampling.
 
-\subsubsection{Taxonomic resolution}
-\label{sec:taxres}
-Predictions are made at genus level, but a phage infecting one member of a bacterial family may infect others,
-so the family may be the resolution at which the interaction is better defined. Therefore, we read the same
-predictions at family level, without refitting any model, and aggregate to family-level predictions following
-these steps: for each family, we take the median predicted probability over its member genera as the
-family-level score, and label a family positive when the majority of its member genera carry a positive label.
-We then aggregate within each fold, such
-that a family-level score carries a standard deviation across folds. Since a median over several members varies
-less than a single prediction does, aggregating may raise the measured performance whether or not the family
-level carries information, which is worth keeping in mind when reading the comparison.
-
-\subsection{The shuffled-Y control}
+\subsubsection{Permutation Control}
 \label{sec:shuffley}
-Section~\ref{sec:joint} fits one latent space for two targets, and if that helps $w_{\text{class}}$ there are two
-reasons it might. Either $y$ carries structure that $w_{\text{class}}$ can use, or the second head merely
-constrains the shared representation and the content of its labels does not matter. We separate the two alternatives
-by refitting the joint model with the $y$ training labels permuted.
 
-We apply the permutation inside the training partition only. The $w_{\text{class}}$ labels stay as they were
-before, and each label the model is evaluated against stays real, such that the only thing that changes is what
-the $y$ head is taught. We use the same folds, the same representation and the same seed as the joint model of
-Section~\ref{sec:joint}, and repeat the permutation five times in each fold.
+To separate a contribution of \(Y\) to the second head from the effect of joint fitting itself, the
+we refit the joint model with the \(Y\) labels permuted within each training fold. Let
+\(\varrho\) be a uniformly drawn permutation of \(\mathcal{T}\). We then fit the two heads against
+\(Y_{\varrho(i,j)}\) and the unpermuted binarised edge weight respectively, with the representation
+the hidden layer, the partition, the architecture, the hyperparameters and the random seed unchanged.
+Under the permutation, \(Y_{\varrho(i,j)}\) is independent of \(z_{ij}\) by construction, so any
+remaining gain on the second head cannot be attributed to information shared between the two
+networks.
 
-We state the reading in advance. If the real labels lift $w_{\text{class}}$ above the permuted ones, then $y$
-carries structure that the shared representation passes to $w_{\text{class}}$. If the two are equal, the benefit
-is the constraint of a second head and the content of its labels is irrelevant. The $y$ head itself is the check
-that the permutation took effect, since a model taught permuted labels should not predict the real ones.
+\subsubsection{Stability Selection}
+\label{sec:stability}
+
+To identify coordinates of \(z_{ij}\) that are selected consistently, we apply stability selection
+\citep{meinshausen2010} to \(Y\). We resample over nodes rather than over pairs, because two pairs
+sharing a node are not independent. For resample \(s\) we draw subsets
+\(\mathcal{B}^{(s)}\subset\mathcal{B}\) and \(\mathcal{V}^{(s)}\subset\mathcal{V}\) containing half the
+nodes of each set, and the resample consists of the observed pairs they span,
+\begin{equation}\label{eq:subsample}
+ \mathcal{P}^{(s)}=\bigl\{(i,j)\in\mathcal{P}\;:\;b_{i}\in\mathcal{B}^{(s)},\;v_{j}\in\mathcal{V}^{(s)}\bigr\}.
+\end{equation}
+Drawing \(K\) complementary pairs \citep{shah2013} gives \(S=2K\) resamples; we redraw a resample with fewer
+than five positive \(Y_{ij}\).
+
+Before resampling we remove coordinates that are non-zero in fewer than ten observed pairs or constant over
+them, which leaves \(d\) candidate coordinates.
+
+On each resample we centre and scale every coordinate within that resample and fit the
+\(L_{1}\)-penalised logistic regression of Equation~\eqref{eq:lasso}, with class weights formed as in
+Section~\ref{sec:models}, along the decreasing grid of penalties
+\begin{equation}\label{eq:ssgrid}
+ \lambda_{t}=\lambda_{\max}\,0.01^{(t-1)/29},\qquad t=1,\ldots,30,
+\end{equation}
+where \(\lambda_{\max}\) is the smallest penalty at which no coordinate is selected. The path of resample
+\(s\) stops at the first penalty \(\lambda^{(s)}\) at which at least \(q\) coordinates are selected, and
+\(\widehat S^{(s)}=\{k:\widehat\beta_{k}(\lambda^{(s)})\neq0\}\) records them. The selection probability
+of coordinate \(k\) is estimated by the selection frequency
+\begin{equation}\label{eq:pisel}
+ \widehat\pi_{k}
+ =\frac{1}{S}\sum_{s=1}^{S}\mathbf{1}\!\left\{k\in\widehat S^{(s)}\right\},
+\end{equation}
+and a coordinate is called stable when \(\widehat\pi_{k}\geq\pi_{\mathrm{thr}}\) for a threshold
+\(\pi_{\mathrm{thr}}\in(\tfrac{1}{2},1)\). Under the exchangeability assumption of
+\citet{meinshausen2010}, the expected number \(V\) of falsely selected coordinates satisfies
+\begin{equation}\label{eq:mbbound}
+ \mathbb{E}[V]\;\leq\;\frac{\bar q^{\,2}}{\left(2\pi_{\mathrm{thr}}-1\right)d},
+\end{equation}
+where \(\bar q\) is the average number of coordinates selected per resample. Requiring
+\(\mathbb{E}[V]\leq1\) gives the target support size
+\begin{equation}\label{eq:qbound}
+ q=\left\lfloor\sqrt{\left(2\pi_{\mathrm{thr}}-1\right)d}\right\rfloor,
+\end{equation}
+at which each path is stopped. Because the grid is discrete, a resample can select slightly more than
+\(q\) coordinates, so \(\bar q\) can exceed \(q\). Because the resampling draws nodes rather than
+independent observations, we use the bound as a guide to the operating point rather than as an exact
+error guarantee.
+
+The penalty and class weighting are those of the penalised linear model of Section~\ref{sec:models}, but
+the penalty is set by the stopping rule rather than by cross-validation, so the analysis describes the
+coordinates that model class selects.
 

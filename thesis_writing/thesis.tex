@@ -13,7 +13,7 @@ through proteome representation}
 \newcommand{\mysubtitle}{A latent space approach across CRC, IBD and GvHD cohorts}
 \newcommand{\myname}{Sinan Maximilian Klein}
 \newcommand{\mysupervisor}{Christian L. M\"uller}
-\newcommand{\mydate}{\textcolor{orange}{Munich, Month Day\textsuperscript{th}, Year}}
+\newcommand{\mydate}{Munich, September 17\textsuperscript{th}, 2026}
 
 \usepackage[a4paper, width = 160mm, top = 35mm, bottom = 30mm,
 bindingoffset = 0mm]{geometry}
@@ -27,6 +27,8 @@ bindingoffset = 0mm]{geometry}
 \newcommand{\changefont}{%
     \fontsize{8}{11}\selectfont
 }
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning}
 \usepackage{hyperref}
 \hypersetup{
   colorlinks = true,
@@ -105,25 +107,27 @@ Supervised by \mysupervisor
 \newpage
 
 \begin{abstract}
-Bacteriophages shape the composition of the human gut microbiome, but which phage infects which bacterium is
-rarely observed directly. Two proxies can be derived from sequencing data: a CRISPR spacer matching a viral genome,
-which records a past infection of the bacterial lineage, and a co-abundance edge estimated by a graphical lasso.
-This thesis predicts both of the proxies from the same representation, in which bacterial genera and viral
-operational taxonomic units are described only by protein clusters formed \emph{de novo} within each cohort.
-No functional annotation is used. Additionally, we train and evaluate each model on the identical set of
-genus--vOTU pairs, on identical folds, in three independent cohorts, and ask whether one latent
-representation can serve both.
+This thesis studies whether two related network representations can be predicted from a common set of high-dimensional 
+features and whether their predictive information can be captured in a shared representation. The problem is 
+investigated in the context of phage--bacteria interaction networks, where one network is constructed from sequence-based 
+CRISPR evidence and the other from abundance-based conditional associations.
 
-The two targets behave very differently. CRISPR linkage reaches 0.78--0.81 AUC across cohorts, while the
-co-abundance edge is predicted consistently above chance but far more weakly, at 0.55--0.61, with negative
-$R^2$ throughout for regression on the continuous edge probability. The weak signal does not improve
-with a change in the model, representation, binarisation threshold or taxonomic resolution. A joint model trained on 
-both targets does not unify them. Even though it results in a small gain for the co-abundance task, it has no clear benefit
-for the CRISPR task. Additionally, the small gain survives even when the CRISPR labels are permuted, which
-implies that the CRISPR task acts as a regulariser for the co-abundance task rather than as a source of
-shared signal. The one component of this pipeline carrying 
-explicit biological information is the CRISPR target; where it entered, the signal is strong, and where it did not, 
-only a weak one remains.
+We use sparse logistic regression, multilayer perceptrons and gradient-boosted 
+trees to assess the linear and nonlinear predictability of both networks, compare single-head with shared 
+representations, and use a shuffled-label control to test whether any advantage of joint learning is 
+attributable to information from the second network or to the joint training procedure itself.
+
+Across three microbiome cohorts, the CRISPR linkage is substantially more predictable than the glasso
+edge, although the advantage of nonlinear over linear modelling is inconsistent across cohorts and model
+families. In contrast, the glasso edge remains only weakly to 
+moderately predictable, with little evidence that increased model flexibility resolves this limitation. A shared 
+representation can support both predictions with little loss in CRISPR performance and small improvements for the 
+glasso edge. However, these improvements persist when the CRISPR labels are shuffled, suggesting that they are more 
+consistent with a regularization-like effect of joint training than with meaningful information transfer
+between the two networks.
+
+
+
 \end{abstract}
 
 \newpage
@@ -144,24 +148,14 @@ only a weak one remains.
 \input{chapters/introduction}
 \newpage
 
-\section{Background}
-\label{background}
-\input{chapters/background}
-\newpage
-
-\section{Data}
-\label{data}
-\input{chapters/data}
-\newpage
-
 \section{Methods}
 \label{methods}
 \input{chapters/methods}
 \newpage
 
-\section{Implementation and reproducibility}
-\label{setup}
-\input{chapters/setup}
+\section{Data}
+\label{data}
+\input{chapters/data}
 \newpage
 
 \section{Results}
@@ -202,18 +196,18 @@ The electronic appendix accompanies this thesis and contains everything needed t
 organised in three parts.
 
 \textbf{Code.} The complete pipeline, as a set of independently runnable stages driven by a single
-configuration file, together with the R scripts that draw every figure, the static test suite, and a README
+configuration file, together with the R scripts that draw every figure and a README
 describing the stage order and the outputs of each stage. The package versions and installation instructions
 are included with it.
 
 \textbf{Run outputs.} The three cohort runs on which this thesis is based, one directory per cohort, each
-holding the frozen configuration used for that run, the preprocessed features, the fold assignments, the
-per-fold predictions and metrics, and the outputs of the ablation, the threshold sweep, the latent export and
-the shuffled-$y$ control. The runs are \texttt{20260815\_143422} (CRC), \texttt{20260815\_174444} (IBD) and
-\texttt{20260815\_202259} (GvHD); every figure and table in this thesis is drawn from these three.
+holding the frozen configuration used for that run, the preprocessed protein cluster profiles, the fold assignments, the
+per-fold predictions and metrics, and the outputs of the threshold sweep, the latent export, the
+representation comparison, the shuffled-$y$ control and the stability selection. All three cohorts were run
+under the run identifier \texttt{20260916\_\allowbreak 152830}; every figure and table in this thesis is drawn from that run.
 
-\textbf{Figures.} All figures produced by the pipeline, including the descriptive and diagnostic views that
-are not reproduced in Section~\ref{app} because no statement in the text depends on them.
+\textbf{Figures.} All figures produced by the pipeline, at the resolution in which they were generated.
+Section~\ref{app} reproduces every one of them that is not already shown in Section~\ref{results}.
 
 \newpage
 
@@ -258,9 +252,10 @@ previously presented to another examination board and has not been published.
 \normalsize
 
 I hereby confirm that I have written all parts of this text myself. I used Claude
-(Opus 4.8 and Opus 5, Cowork; Anthropic) as a tool: the source code of the analysis pipeline was
-generated with it under my direction, and I further used it for restructuring and refining the
-writing, for checking the analysis for errors, and for literature search. I specified the
+(Opus 4.8 and Opus 5, Cowork; Anthropic) and ChatGPT (GPT-5.6; OpenAI) as tools. The source code of
+the analysis pipeline was generated with Claude under my direction, and I further used Claude for
+restructuring and refining the writing, for checking the analysis for errors, and for literature
+search. ChatGPT was used for restructuring and refining the writing. I specified the
 experimental design, the structure of the pipeline and every analytical choice, reviewed each
 stage and inspected its outputs. All suggestions were manually reviewed, adapted and reformulated,
 and I take full responsibility for the content of this work.

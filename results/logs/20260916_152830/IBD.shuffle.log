@@ -1,0 +1,13 @@
+[shuffle] fold 0 done
+[shuffle] fold 1 done
+[shuffle] fold 2 done
+[shuffle] fold 3 done
+[shuffle] fold 4 done
+[shuffle] fold 5 done
+[shuffle] fold 6 done
+[shuffle] fold 7 done
+[shuffle] fold 8 done
+[shuffle] fold 9 done
+cohort    head  n_folds  auc_real  auc_shuffled  auc_diff  auc_diff_sd  folds_real_higher  p_paired  ap_real  ap_shuffled  shuffled_auc_min  shuffled_auc_max  n_shuffles
+   IBD       y       10    0.7470        0.4871    0.2599       0.0597                 10    0.0000   0.2568       0.0500            0.4556            0.5214           5
+   IBD w_class       10    0.6047        0.5993    0.0054       0.0119                  7    0.1864   0.4797       0.4747            0.5939            0.6039           5

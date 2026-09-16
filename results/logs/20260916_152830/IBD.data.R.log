@@ -1,0 +1,16 @@
+[plot_data] dataset=IBD_outputs run=20260916_152830
+[plot_data] wrote 10 plots to /home/sinan/results/IBD_outputs/20260916_152830/plots/data
+[plot_data:interactions] 94 bacteria x 293 viruses
+[plot_data:interactions] wrote interaction_Y_matrix.png
+[plot_data:interactions] wrote interaction_W_matrix.png
+[plot_data:interactions] observed block 75 x 70 = 5250 pairs; 182 CRISPR edges
+[plot_data:interactions] wrote interaction_combined_matrix.png
+[plot_data] CRISPR linkage: edges = 682, density = 2.48%, NODF = 17.7
+[plot_data:interactions] wrote nestedness_Y.png
+[plot_data] glasso edge, observed block: edges = 2019, density = 38.46%, mean prob = 0.097, NODF = 42.2
+[plot_data:interactions] wrote nestedness_W.png
+[plot_data:interactions] wrote interaction_W_matrix_observed.png
+[plot_data:interactions] wrote interaction_Y_matrix_observed.png
+[plot_data:interactions] wrote interaction/nestedness plots to /home/sinan/results/IBD_outputs/20260916_152830/plots/data
+[plot_data:procs] wrote 10_proc_sparsity.png
+[plot_data] done.

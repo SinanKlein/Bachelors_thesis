@@ -1,0 +1,2 @@
+[stability] task=y n=19264 p=3051 tau=0.8 q=42 E[V]<=0.96
+[stability] 0 stable feature(s) -> /home/sinan/results/GvHD_outputs/20260916_152830/stability

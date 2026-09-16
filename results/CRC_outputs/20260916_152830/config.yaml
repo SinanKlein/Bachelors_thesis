@@ -1,0 +1,120 @@
+resampling:
+  n_outer: 10
+  seed: 42
+tasks:
+- name: y
+  task_type: binary
+  label_source: Y_binary
+  mask_source: Mask_observed
+- name: w_reg
+  task_type: regression
+  label_source: W_continuous
+  mask_source: Mask_observed
+  transform: logit
+- name: w_class
+  task_type: binary
+  label_source: W_continuous
+  mask_source: Mask_observed
+  binarize: true
+  binarize_threshold: 0.0
+models:
+- name: sparse_logistic
+  class: sparse_logistic
+  task_type: binary
+  params:
+    C: 1.0
+    penalty: l1
+    solver: liblinear
+    max_iter: 2000
+    lambda_cv:
+      enabled: true
+      n_inner: 3
+      n_points: 8
+      ratio_min: 0.05
+      metric: auc
+      rule: 1se
+- name: xgb_clf
+  class: xgb_clf
+  task_type: binary
+  params: &id001
+    n_estimators: 500
+    max_depth: 4
+    learning_rate: 0.05
+    subsample: 0.8
+    colsample_bytree: 0.8
+- name: linreg
+  class: linreg
+  task_type: regression
+  params:
+    alpha: 1.0
+- name: xgb_reg
+  class: xgb_reg
+  task_type: regression
+  params: *id001
+- name: mlp_clf_y
+  class: mlp_clf
+  task_type: binary
+  target_task: y
+  export_latent: true
+  params: &id002
+    hidden_dim: 64
+    dropout: 0.3
+    batch_size: 512
+    lr: 0.0003
+    weight_decay: 0.001
+    n_epochs: 200
+- name: mlp_clf_w_class
+  class: mlp_clf
+  task_type: binary
+  target_task: w_class
+  export_latent: true
+  params: *id002
+- name: mlp_reg
+  class: mlp_reg
+  task_type: regression
+  target_task: w_reg
+  params: *id002
+- name: mlp_latent_yw
+  class: mlp_yw_joint
+  task_type: joint_y_w
+  export_latent: true
+  params:
+    hidden_dim: 64
+    dropout: 0.3
+    batch_size: 512
+    lr: 0.0003
+    weight_decay: 0.001
+    n_epochs: 200
+    lambda_y: 1.0
+    lambda_w: 1.0
+evaluation:
+  cutoff_grid_start: 0.01
+  cutoff_grid_stop: 0.99
+  cutoff_grid_step: 0.01
+  logit_eps: 0.001
+w_threshold:
+  w_task: w_reg
+  n_cuts: 10
+  solver: lbfgs
+  C: 1.0
+  max_iter: 1000
+  n_jobs: 2
+  run_xgboost: true
+  xgb_params: *id001
+stability:
+  task: y
+  tau: 0.8
+  target_ev: 1.0
+  n_complementary_pairs: 25
+  min_positives: 5
+  min_pair_support: 10
+  grid_ratios:
+  - 1.0
+  - 0.6
+  - 0.4
+  - 0.25
+  - 0.15
+  - 0.1
+  lambda_max_multiplier: 2.0
+  tol: 0.0001
+  max_iter: 1000

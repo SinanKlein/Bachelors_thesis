@@ -1,0 +1,12 @@
+[results] dataset=GvHD_outputs run=20260916_152830
+[results] wrote y_auc_all.png
+[results] wrote y_auc_baseline.png
+[results] wrote y_ap_all.png
+[results] wrote y_ap_baseline.png
+[results] wrote w_class_auc_all.png
+[results] wrote w_class_auc_baseline.png
+[results] wrote w_class_ap_all.png
+[results] wrote w_class_ap_baseline.png
+[results] wrote w_reg_r2_all.png
+[results] wrote w_reg_r2_baseline.png
+[results] 11 files in /home/sinan/results/GvHD_outputs/20260916_152830/plots/results

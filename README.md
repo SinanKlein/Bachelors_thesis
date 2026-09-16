@@ -2,82 +2,49 @@
 
 Bachelor's thesis, LMU Munich — Sinan Klein.
 
-Two independent proxies for bacteria–virus interaction are predicted from the same
-annotation-free protein-cluster representation, on the same genus × vOTU pairs, in
-three cohorts (CRC, GvHD, IBD):
+Two proxies for bacteria–virus interaction are predicted from the same protein-cluster representation,
+on the same genus × vOTU pairs, in three cohorts (CRC, GvHD, IBD):
 
 | target | meaning | source |
 |---|---|---|
 | `y` | CRISPR linkage (binary) | spacer matches, SpacePHARER |
-| `w_reg` | glasso edge probability in [0,1] | sparse graphical lasso + StARS |
-| `w_class` | `1[W > 0]` | the same, thresholded |
+| `w_reg` | glasso edge selection probability in [0,1] | SPIEC-EASI (graphical lasso + StARS) |
+| `w_class` | `1[W > 0]` | the same, binarised |
 
-Both partners are described only by protein clusters formed *de novo* within each
-cohort with MMseqs2 — no reference database, no functional annotation.
-
-## Headline result
-
-`Y` is robustly learnable, `W` is essentially not, and this replicates across all
-three cohorts (mean test AUC over 10 outer folds):
-
-| task | CRC | GvHD | IBD |
-|---|---|---|---|
-| `y`, best MLP | 0.812 | 0.789 | 0.810 |
-| `w_class`, best model | 0.587 | 0.601 | 0.608 |
-| `w_reg`, R² | −0.14 | −0.14 | −0.12 |
-
-A shuffled-`y` control confirms it: permuting the `y` training labels collapses the
-`y` head to chance (−0.31 AUC, p < 1e-7 in every cohort) but leaves the `w_class`
-head untouched (|Δ| ≤ 0.005), so the joint model gains nothing from shared structure.
+Protein clusters are formed within each cohort with MMseqs2. The pair feature uses the clusters present in
+both vocabularies, as presence/absence, summed over the two partners.
 
 ## Layout
 
 ```
-scripts_modularPipe/phage_host_pipeline/   the pipeline (see its own README)
+scripts_modularPipe/phage_host_pipeline/   the pipeline (see its README)
 thesis_writing/                            LaTeX source, figures, bibliography
-results_modularPipe/                       plots, metrics and run logs per cohort
+results/<cohort>_outputs/20260916_152830/  plots, metrics, configs per cohort
+results/logs/20260916_152830/              one log per stage and cohort
 ```
-
-`scripts_modularPipe/phage_host_pipeline/README.md` documents the nine pipeline
-stages, the representation ablation, the latent export and the tests.
 
 ## Running it
 
 ```bash
 cd scripts_modularPipe/phage_host_pipeline
 pip install -r requirements.txt
-python tests/test_static.py       # fast source checks
-python tests/test_r_static.py     # the same for the R layer
-python run_all.py                 # the full pipeline for one cohort
+python run.py                  # one cohort (set in common.py or PIPELINE_COHORT)
+bash run_cloud.sh              # all three cohorts in parallel (Linux)
 ```
 
-The cohort is set by `COHORT` in `paths.py`, which also holds the absolute input
-and output paths — edit both before running on another machine.
+Paths and the cohort are set in `common.py` and can be overridden with the environment variables
+`PIPELINE_COHORT`, `PIPELINE_DATA_ROOT`, `PIPELINE_SPLITS_ROOT` and `PIPELINE_RESULTS_DIR`.
+All model and analysis settings are in `config.yaml`.
 
 ## Data
 
-The input data (~1.9 GB: abundance tables, CRISPR matrices, protein clusters,
-glasso networks) is **not** in this repository and is archived separately.
-`build_graph_data.py` regenerates `graph_data.npz` from it.
-
-The CRISPR and glasso networks were provided by the supervising group and were not
-generated as part of this thesis.
+The input data (abundance tables, CRISPR matrices, protein clusters, glasso networks) is not in this
+repository and is archived separately. `python data.py build` regenerates `graph_data.npz` from it.
+The CRISPR and glasso networks were provided by the supervising group.
 
 ## Results in this repository
 
-`results_modularPipe/` carries every figure, every metric CSV and every run log —
-enough to check any number in the thesis without re-running anything. The bulky
-per-pair intermediates (`predictions.csv`, `latent_space.csv.gz`, `feature_stats.csv`,
-`splits.csv`, `*.npz`) are excluded; the pipeline regenerates them.
-
-The results were produced by these runs:
-
-| cohort | run id | wall time |
-|---|---|---|
-| CRC | `20260827_211118_nogit` | ~2.1 h |
-| GvHD | `20260828_000654_nogit` | ~11.9 h |
-| IBD | `20260828_132354_nogit` | ~2.7 h |
-
-Every run log records its environment under an `env` key. All three were produced
-with Python 3.13.12, numpy 2.4.4, pandas 3.0.2, scikit-learn 1.8.0, torch 2.11.0
-(CPU) and xgboost 3.2.0; `requirements.lock.txt` pins the full set.
+All three cohorts were run under the run id `20260916_152830` (Google Cloud, 12 vCPUs, about 110 minutes
+in total). `results/` carries every figure, every metric table, the frozen config of the run and the stage
+logs; the per-pair intermediates (`predictions.csv`, `latent_space.csv.gz`, `splits.csv`,
+`feature_stats.csv`, `*.npz`) are excluded and are regenerated by the pipeline.

@@ -1,29 +1,39 @@
-# ---- data and results: too large for git, archived separately -------------
+# ---- data: too large for git, archived separately ---------------------------
 datas_final/
 multimodal_network/
 
-# results: keep the plots, the metrics and the logs; leave out the bulky
-# per-pair intermediates (predictions, latents, splits, feature_stats, npz)
-results_modularPipe/**
-!results_modularPipe/**/
-!results_modularPipe/**/*.png
-!results_modularPipe/**/*.json
-!results_modularPipe/**/config.yaml
-!results_modularPipe/**/metrics_by_fold.csv
-!results_modularPipe/**/descriptives.csv
-!results_modularPipe/**/w_threshold_sweep.csv
-!results_modularPipe/**/w_threshold_sweep_summary.csv
-!results_modularPipe/**/ablation_metrics.csv
-!results_modularPipe/**/family_metrics.csv
-!results_modularPipe/**/shuffle_probe_metrics.csv
-!results_modularPipe/**/shuffle_probe_summary.csv
-!results_modularPipe/**/outer_test_summary.csv
-!results_modularPipe/**/w_threshold_auc_summary.csv
+# ---- local working copies (the repository carries results/ and thesis_writing/)
+results_modularPipe/
+results_cloud/
+results_gcloud_20260916/
+thesis_writing_impr/
+*.tgz
+
+# ---- results: plots, metrics, configs and run logs only ----------------------
+results/**
+!results/**/
+!results/**/*.png
+!results/**/*.json
+!results/**/config.yaml
+!results/**/metrics_by_fold.csv
+!results/**/lambda_cv.csv
+!results/**/lambda_cv_curve.csv
+!results/**/descriptives.csv
+!results/**/w_threshold_sweep.csv
+!results/**/w_threshold_sweep_summary.csv
+!results/**/w_threshold_auc_summary.csv
+!results/**/outer_test_summary.csv
+!results/**/shuffle_probe_metrics.csv
+!results/**/shuffle_probe_summary.csv
+!results/**/stability_selection.csv
+!results/**/cka_by_fold.csv
+!results/**/cka_summary.csv
 *.npz
 *.rds
 
 # ---- LaTeX build products -------------------------------------------------
-thesis_writing/thesis.pdf
+thesis_writing/*.pdf
+*.bak*
 *.aux
 *.log
 *.out
@@ -50,15 +60,16 @@ env/
 .RData
 .Rproj.user/
 
-# ---- misc archives and OS junk -------------------------------------------
+# ---- misc -------------------------------------------------------------------
 scripts_modularPipe.zip
-# third-party paper, do not redistribute
 nbt.3988.pdf
-
-# large binaries / archives
 thesis_writing.zip
 Presentation_multimodal_networks.pptx
 __MACOSX/
 _to_delete/
+_backup*/
 .DS_Store
 Thumbs.db
+
+# ---- keep the pipeline run logs (after *.log above) ------------------------
+!results/logs/**/*.log

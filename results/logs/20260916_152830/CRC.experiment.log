@@ -1,0 +1,123 @@
+[experiment] X (13950, 1107) | models ['sparse_logistic', 'xgb_clf', 'linreg', 'xgb_reg', 'mlp_clf_y', 'mlp_clf_w_class', 'mlp_reg', 'mlp_latent_yw']
+[experiment] fold 0 | sparse_logistic | n_tr=5185 | 46.4s
+[experiment] fold 0 | xgb_clf | n_tr=5185 | 7.4s
+[experiment] fold 0 | mlp_clf_y | n_tr=5185 | 29.7s
+/home/sinan/venv/lib/python3.12/site-packages/sklearn/linear_model/_ridge.py:227: LinAlgWarning: An ill-conditioned matrix detected: slice 0 has rcond = 1.0530989413837233e-07.
+  return linalg.solve(A, Xy, assume_a="pos", overwrite_a=True).T
+[experiment] fold 0 | linreg | n_tr=5185 | 0.2s
+[experiment] fold 0 | xgb_reg | n_tr=5185 | 6.8s
+[experiment] fold 0 | mlp_reg | n_tr=5185 | 22.3s
+[experiment] fold 0 | sparse_logistic | n_tr=5185 | 15.0s
+[experiment] fold 0 | xgb_clf | n_tr=5185 | 6.5s
+[experiment] fold 0 | mlp_clf_w_class | n_tr=5185 | 19.6s
+[experiment] fold 0 | mlp_latent_yw | n_tr=5185 | 24.3s
+[experiment] fold 1 | sparse_logistic | n_tr=5159 | 36.5s
+[experiment] fold 1 | xgb_clf | n_tr=5159 | 6.8s
+[experiment] fold 1 | mlp_clf_y | n_tr=5159 | 19.3s
+/home/sinan/venv/lib/python3.12/site-packages/sklearn/linear_model/_ridge.py:227: LinAlgWarning: An ill-conditioned matrix detected: slice 0 has rcond = 8.462250633556323e-08.
+  return linalg.solve(A, Xy, assume_a="pos", overwrite_a=True).T
+[experiment] fold 1 | linreg | n_tr=5159 | 0.2s
+[experiment] fold 1 | xgb_reg | n_tr=5159 | 6.1s
+[experiment] fold 1 | mlp_reg | n_tr=5159 | 19.2s
+[experiment] fold 1 | sparse_logistic | n_tr=5159 | 11.8s
+[experiment] fold 1 | xgb_clf | n_tr=5159 | 6.5s
+[experiment] fold 1 | mlp_clf_w_class | n_tr=5159 | 19.3s
+[experiment] fold 1 | mlp_latent_yw | n_tr=5159 | 24.1s
+[experiment] fold 2 | sparse_logistic | n_tr=5175 | 35.6s
+[experiment] fold 2 | xgb_clf | n_tr=5175 | 6.7s
+[experiment] fold 2 | mlp_clf_y | n_tr=5175 | 19.2s
+/home/sinan/venv/lib/python3.12/site-packages/sklearn/linear_model/_ridge.py:227: LinAlgWarning: An ill-conditioned matrix detected: slice 0 has rcond = 1.0379174142371994e-07.
+  return linalg.solve(A, Xy, assume_a="pos", overwrite_a=True).T
+[experiment] fold 2 | linreg | n_tr=5175 | 0.2s
+[experiment] fold 2 | xgb_reg | n_tr=5175 | 6.2s
+[experiment] fold 2 | mlp_reg | n_tr=5175 | 19.5s
+[experiment] fold 2 | sparse_logistic | n_tr=5175 | 12.0s
+[experiment] fold 2 | xgb_clf | n_tr=5175 | 6.3s
+[experiment] fold 2 | mlp_clf_w_class | n_tr=5175 | 19.2s
+[experiment] fold 2 | mlp_latent_yw | n_tr=5175 | 24.3s
+[experiment] fold 3 | sparse_logistic | n_tr=5189 | 43.7s
+[experiment] fold 3 | xgb_clf | n_tr=5189 | 6.5s
+[experiment] fold 3 | mlp_clf_y | n_tr=5189 | 18.5s
+/home/sinan/venv/lib/python3.12/site-packages/sklearn/linear_model/_ridge.py:227: LinAlgWarning: An ill-conditioned matrix detected: slice 0 has rcond = 1.0225309665656823e-07.
+  return linalg.solve(A, Xy, assume_a="pos", overwrite_a=True).T
+[experiment] fold 3 | linreg | n_tr=5189 | 0.2s
+[experiment] fold 3 | xgb_reg | n_tr=5189 | 6.2s
+[experiment] fold 3 | mlp_reg | n_tr=5189 | 18.6s
+[experiment] fold 3 | sparse_logistic | n_tr=5189 | 7.7s
+[experiment] fold 3 | xgb_clf | n_tr=5189 | 3.4s
+[experiment] fold 3 | mlp_clf_w_class | n_tr=5189 | 12.4s
+[experiment] fold 3 | mlp_latent_yw | n_tr=5189 | 15.1s
+[experiment] fold 4 | sparse_logistic | n_tr=5214 | 20.9s
+[experiment] fold 4 | xgb_clf | n_tr=5214 | 3.4s
+[experiment] fold 4 | mlp_clf_y | n_tr=5214 | 12.4s
+/home/sinan/venv/lib/python3.12/site-packages/sklearn/linear_model/_ridge.py:227: LinAlgWarning: An ill-conditioned matrix detected: slice 0 has rcond = 1.0524557580993132e-07.
+  return linalg.solve(A, Xy, assume_a="pos", overwrite_a=True).T
+[experiment] fold 4 | linreg | n_tr=5214 | 0.1s
+[experiment] fold 4 | xgb_reg | n_tr=5214 | 3.5s
+[experiment] fold 4 | mlp_reg | n_tr=5214 | 12.5s
+[experiment] fold 4 | sparse_logistic | n_tr=5214 | 7.5s
+[experiment] fold 4 | xgb_clf | n_tr=5214 | 3.5s
+[experiment] fold 4 | mlp_clf_w_class | n_tr=5214 | 12.3s
+[experiment] fold 4 | mlp_latent_yw | n_tr=5214 | 15.0s
+[experiment] fold 5 | sparse_logistic | n_tr=5202 | 22.8s
+[experiment] fold 5 | xgb_clf | n_tr=5202 | 3.7s
+[experiment] fold 5 | mlp_clf_y | n_tr=5202 | 12.5s
+/home/sinan/venv/lib/python3.12/site-packages/sklearn/linear_model/_ridge.py:227: LinAlgWarning: An ill-conditioned matrix detected: slice 0 has rcond = 9.023716529554804e-08.
+  return linalg.solve(A, Xy, assume_a="pos", overwrite_a=True).T
+[experiment] fold 5 | linreg | n_tr=5202 | 0.1s
+[experiment] fold 5 | xgb_reg | n_tr=5202 | 3.3s
+[experiment] fold 5 | mlp_reg | n_tr=5202 | 12.6s
+[experiment] fold 5 | sparse_logistic | n_tr=5202 | 7.4s
+[experiment] fold 5 | xgb_clf | n_tr=5202 | 3.4s
+[experiment] fold 5 | mlp_clf_w_class | n_tr=5202 | 12.5s
+[experiment] fold 5 | mlp_latent_yw | n_tr=5202 | 15.0s
+[experiment] fold 6 | sparse_logistic | n_tr=5184 | 23.3s
+[experiment] fold 6 | xgb_clf | n_tr=5184 | 3.5s
+[experiment] fold 6 | mlp_clf_y | n_tr=5184 | 12.4s
+/home/sinan/venv/lib/python3.12/site-packages/sklearn/linear_model/_ridge.py:227: LinAlgWarning: An ill-conditioned matrix detected: slice 0 has rcond = 7.833478576912967e-08.
+  return linalg.solve(A, Xy, assume_a="pos", overwrite_a=True).T
+[experiment] fold 6 | linreg | n_tr=5184 | 0.1s
+[experiment] fold 6 | xgb_reg | n_tr=5184 | 3.3s
+[experiment] fold 6 | mlp_reg | n_tr=5184 | 12.2s
+[experiment] fold 6 | sparse_logistic | n_tr=5184 | 6.7s
+[experiment] fold 6 | xgb_clf | n_tr=5184 | 3.4s
+[experiment] fold 6 | mlp_clf_w_class | n_tr=5184 | 12.6s
+[experiment] fold 6 | mlp_latent_yw | n_tr=5184 | 15.1s
+[experiment] fold 7 | sparse_logistic | n_tr=5193 | 18.2s
+[experiment] fold 7 | xgb_clf | n_tr=5193 | 3.5s
+[experiment] fold 7 | mlp_clf_y | n_tr=5193 | 12.7s
+[experiment] fold 7 | linreg | n_tr=5193 | 0.1s
+[experiment] fold 7 | xgb_reg | n_tr=5193 | 3.4s
+[experiment] fold 7 | mlp_reg | n_tr=5193 | 12.7s
+[experiment] fold 7 | sparse_logistic | n_tr=5193 | 7.0s
+[experiment] fold 7 | xgb_clf | n_tr=5193 | 3.5s
+[experiment] fold 7 | mlp_clf_w_class | n_tr=5193 | 12.4s
+[experiment] fold 7 | mlp_latent_yw | n_tr=5193 | 15.1s
+[experiment] fold 8 | sparse_logistic | n_tr=5190 | 18.2s
+[experiment] fold 8 | xgb_clf | n_tr=5190 | 3.5s
+[experiment] fold 8 | mlp_clf_y | n_tr=5190 | 12.6s
+/home/sinan/venv/lib/python3.12/site-packages/sklearn/linear_model/_ridge.py:227: LinAlgWarning: An ill-conditioned matrix detected: slice 0 has rcond = 7.668720058973122e-08.
+  return linalg.solve(A, Xy, assume_a="pos", overwrite_a=True).T
+[experiment] fold 8 | linreg | n_tr=5190 | 0.1s
+[experiment] fold 8 | xgb_reg | n_tr=5190 | 3.3s
+[experiment] fold 8 | mlp_reg | n_tr=5190 | 12.2s
+[experiment] fold 8 | sparse_logistic | n_tr=5190 | 6.9s
+[experiment] fold 8 | xgb_clf | n_tr=5190 | 3.2s
+[experiment] fold 8 | mlp_clf_w_class | n_tr=5190 | 12.3s
+[experiment] fold 8 | mlp_latent_yw | n_tr=5190 | 15.2s
+[experiment] fold 9 | sparse_logistic | n_tr=5203 | 20.9s
+[experiment] fold 9 | xgb_clf | n_tr=5203 | 3.6s
+[experiment] fold 9 | mlp_clf_y | n_tr=5203 | 12.2s
+/home/sinan/venv/lib/python3.12/site-packages/sklearn/linear_model/_ridge.py:227: LinAlgWarning: An ill-conditioned matrix detected: slice 0 has rcond = 7.684349867531637e-08.
+  return linalg.solve(A, Xy, assume_a="pos", overwrite_a=True).T
+[experiment] fold 9 | linreg | n_tr=5203 | 0.1s
+[experiment] fold 9 | xgb_reg | n_tr=5203 | 3.4s
+[experiment] fold 9 | mlp_reg | n_tr=5203 | 12.6s
+[experiment] fold 9 | sparse_logistic | n_tr=5203 | 7.3s
+[experiment] fold 9 | xgb_clf | n_tr=5203 | 3.3s
+[experiment] fold 9 | mlp_clf_w_class | n_tr=5203 | 12.4s
+[experiment] fold 9 | mlp_latent_yw | n_tr=5203 | 15.1s
+[experiment] latent mlp_clf_y: 5766 rows x 64 dims -> /home/sinan/results/CRC_outputs/20260916_152830/latent/mlp_clf_y
+[experiment] latent mlp_clf_w_class: 5766 rows x 64 dims -> /home/sinan/results/CRC_outputs/20260916_152830/latent/mlp_clf_w_class
+[experiment] latent mlp_latent_yw: 5766 rows x 64 dims -> /home/sinan/results/CRC_outputs/20260916_152830/latent/mlp_latent_yw
+[experiment] done in 1159.0s

@@ -1,0 +1,20 @@
+{
+  "run_id": "20260916_152830",
+  "base_seed": 42,
+  "elapsed_sec": 1379.02,
+  "tasks": [
+    "y",
+    "w_reg",
+    "w_class"
+  ],
+  "models": [
+    "sparse_logistic",
+    "xgb_clf",
+    "linreg",
+    "xgb_reg",
+    "mlp_clf_y",
+    "mlp_clf_w_class",
+    "mlp_reg",
+    "mlp_latent_yw"
+  ]
+}

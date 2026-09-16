@@ -1,0 +1,2 @@
+[stability] task=y n=5250 p=2013 tau=0.8 q=34 E[V]<=0.96
+[stability] 0 stable feature(s) -> /home/sinan/results/IBD_outputs/20260916_152830/stability

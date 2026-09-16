@@ -1,0 +1,12 @@
+"task","task_label","task_type","model","auc_mean","auc_sd","ap_mean","ap_sd","r2_mean","r2_sd","n_folds"
+"w_class","glasso edge (binarised)","binary","mlp_clf_w_class",0.605838701305912,0.024380721915083,0.480145546126122,0.0429217537773273,NA,NA,10
+"w_class","glasso edge (binarised)","binary","mlp_latent_yw",0.604673806396462,0.0197866333386992,0.479735076550161,0.0412264676218292,NA,NA,10
+"w_class","glasso edge (binarised)","binary","sparse_logistic",0.577645710738549,0.0202685145237757,0.44169122749164,0.0325504854957608,NA,NA,10
+"w_class","glasso edge (binarised)","binary","xgb_clf",0.577638329501509,0.0238324274303524,0.455332762576847,0.0391760035711537,NA,NA,10
+"w_reg","glasso edge probability","regression","linreg",NA,NA,NA,NA,-0.152690416099733,0.0206129088861694,10
+"w_reg","glasso edge probability","regression","mlp_reg",NA,NA,NA,NA,-0.130170237047179,0.0226040184657127,10
+"w_reg","glasso edge probability","regression","xgb_reg",NA,NA,NA,NA,-0.160556226665754,0.0387978679434799,10
+"y","CRISPR linkage","binary","mlp_clf_y",0.740353982127032,0.0613277021820939,0.268599028117092,0.106137391552977,NA,NA,10
+"y","CRISPR linkage","binary","mlp_latent_yw",0.746961006649212,0.0533216347033966,0.256803291618821,0.0903065713486566,NA,NA,10
+"y","CRISPR linkage","binary","sparse_logistic",0.779931577408476,0.05879627597739,0.260425475347231,0.0946760317242095,NA,NA,10
+"y","CRISPR linkage","binary","xgb_clf",0.78582850028821,0.0508280121638757,0.286362631096656,0.109956364991752,NA,NA,10

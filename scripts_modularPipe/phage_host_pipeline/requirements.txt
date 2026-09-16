@@ -1,49 +1,13 @@
-# Python dependencies for the phage-host pipeline.
-#
-#     pip install -r requirements.txt
-#
-# Versions are pinned with `>=` on the minor series rather than `==`: these are
-# the versions the pipeline was developed and tested against, and anything
-# newer in the same series is expected to work. If you need a bit-for-bit
-# reproduction of a specific run, freeze the exact versions instead:
-#
-#     pip freeze > requirements.lock.txt
-#
-# and record which run_id it corresponds to. The frozen config.yaml inside each
-# results folder already captures the parameters; this captures the code around
-# them.
-#
-# Verify an install with:
-#
-#     python tests/test_golden.py
-#
-# which runs the pipeline on a synthetic fixture and checks every output hash.
-
-# --- core: required by every stage -------------------------------------------
+# pip install -r requirements.txt   (exact versions of a past run: requirements.lock.txt)
 numpy>=2.2,<3
 pandas>=2.3,<3
 scipy>=1.15,<2
 scikit-learn>=1.7,<2
 PyYAML>=6.0
-joblib>=1.5              # parallel folds in the W-threshold and stability blocks
-matplotlib>=3.10         # the bipartite network figure in graph_export.py
-
-# --- models -------------------------------------------------------------------
-# xgboost powers xgb_clf / xgb_reg. Drop those entries from default.yaml if you
-# would rather not install it; every other model still runs.
+joblib>=1.5
+matplotlib>=3.10
 xgboost>=2.0
-
-# torch powers every MLP: the plain baselines, the latent models and the joint
-# two-head model, i.e. all of latent.py. CPU wheels are sufficient — the models
-# are small and the pipeline never assumes a GPU.
 torch>=2.0
 
-# --- tests --------------------------------------------------------------------
-# Optional: tests/test_golden.py also runs standalone with plain python.
-pytest>=8.0
-
-# --- R -------------------------------------------------------------------------
-# The plotting layer is R, not Python. Install once from an R prompt:
-#     install.packages(c("ggplot2", "dplyr", "tidyr", "readr",
-#                        "tibble", "jsonlite", "scales", "yaml"))
-# Set R_EXECUTABLE at the top of run_all.py to your Rscript path.
+# R plots (plots/*.R), from an R prompt:
+#   install.packages(c("ggplot2", "dplyr", "tidyr", "readr", "tibble", "jsonlite", "scales", "patchwork"))

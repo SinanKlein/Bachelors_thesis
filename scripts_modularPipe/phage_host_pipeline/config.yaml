@@ -1,0 +1,135 @@
+# Pipeline configuration. Paths and cohort are set in common.py.
+
+resampling:
+  n_outer: 10                    # stratified outer folds (on the y label)
+  seed: 42
+
+# task_type  : binary (AUC, AP, cutoff sweep) | regression (R2)
+# label_source / mask_source : keys in data_filtered.npz; only mask == 1 rows are used
+# binarize   : label = 1[label > binarize_threshold]
+tasks:
+  - name: y
+    task_type: binary
+    label_source: Y_binary
+    mask_source: Mask_observed
+
+  - name: w_reg
+    task_type: regression
+    label_source: W_continuous
+    mask_source: Mask_observed
+    transform: logit             # fit on logit(clip(W, eps, 1 - eps)), score on the W scale
+
+  - name: w_class
+    task_type: binary
+    label_source: W_continuous
+    mask_source: Mask_observed
+    binarize: true
+    binarize_threshold: 0.0
+
+# class       : key in models.MODELS
+# target_task : run only on this task (default: every task of task_type)
+# export_latent : write the hidden activation of each fold's test pairs to latent/<name>/
+# &xgb / &mlp define a parameter block once; *xgb / *mlp reuse it (editing it changes every user).
+models:
+  - name: sparse_logistic
+    class: sparse_logistic
+    task_type: binary
+    params:
+      C: 1.0                     # used only when lambda_cv cannot run
+      penalty: l1
+      solver: liblinear
+      max_iter: 2000
+      lambda_cv:                 # inner CV for the L1 penalty
+        enabled: true
+        n_inner: 3
+        n_points: 8              # grid of lambda / lambda_max from 1 down to ratio_min
+        ratio_min: 0.05
+        metric: auc              # auc | deviance
+        rule: 1se                # 1se | min
+
+  - name: xgb_clf
+    class: xgb_clf
+    task_type: binary
+    params: &xgb
+      n_estimators: 500
+      max_depth: 4
+      learning_rate: 0.05
+      subsample: 0.8
+      colsample_bytree: 0.8
+
+  - name: linreg
+    class: linreg
+    task_type: regression
+    params:
+      alpha: 1.0
+
+  - name: xgb_reg
+    class: xgb_reg
+    task_type: regression
+    params: *xgb
+
+  - name: mlp_clf_y
+    class: mlp_clf
+    task_type: binary
+    target_task: y
+    export_latent: true
+    params: &mlp
+      hidden_dim: 64
+      dropout: 0.3
+      batch_size: 512
+      lr: 3.0e-4
+      weight_decay: 1.0e-3
+      n_epochs: 200
+
+  - name: mlp_clf_w_class
+    class: mlp_clf
+    task_type: binary
+    target_task: w_class
+    export_latent: true
+    params: *mlp
+
+  - name: mlp_reg
+    class: mlp_reg
+    task_type: regression
+    target_task: w_reg
+    params: *mlp
+
+  - name: mlp_latent_yw          # shared trunk, heads for y and w_class
+    class: mlp_yw_joint
+    task_type: joint_y_w
+    export_latent: true
+    params:
+      <<: *mlp
+      lambda_y: 1.0
+      lambda_w: 1.0
+
+evaluation:
+  cutoff_grid_start: 0.01
+  cutoff_grid_stop: 0.99
+  cutoff_grid_step: 0.01
+  logit_eps: 1.0e-3
+
+# analyses.py w_threshold: L2 logistic and XGBoost on 1[W > t], n_cuts interior t in (0, 1)
+w_threshold:
+  w_task: w_reg
+  n_cuts: 10
+  solver: lbfgs
+  C: 1.0
+  max_iter: 1000
+  n_jobs: 2                      # each worker holds its own copy of X
+  run_xgboost: true
+  xgb_params: *xgb
+
+# analyses.py stability: complementary node-level subsamples; on each, a standardised,
+# class-balanced L1 logistic path stopped once the support reaches q = sqrt(target_ev * (2 tau - 1) * p)
+stability:
+  task: y
+  tau: 0.8
+  target_ev: 1.0
+  n_complementary_pairs: 25      # B = 50 subsamples
+  min_positives: 5               # redraw a split with fewer positives in a half
+  min_pair_support: 10           # drop clusters present in < 10 pairs
+  n_grid: 30                     # lambda / lambda_max from 1 down to ratio_min, log-spaced
+  ratio_min: 0.01
+  tol: 0.0001
+  max_iter: 1000

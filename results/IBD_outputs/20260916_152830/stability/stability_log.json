@@ -1,0 +1,32 @@
+{
+  "run_id": "20260916_152830",
+  "dataset": "IBD_outputs",
+  "task": "y",
+  "seed": 42,
+  "n_rows": 5250,
+  "p": 2013,
+  "prevalence": 0.034666666666666665,
+  "tau": 0.8,
+  "q": 34,
+  "target_ev": 1.0,
+  "expected_false_positives_bound": 0.957,
+  "B": 50,
+  "n_subsamples_used": 50,
+  "mean_q_reached": 36.8,
+  "n_subsamples_below_q": 0,
+  "median_lambda_over_lambda_max": 0.07880462815669913,
+  "n_stable": 0,
+  "config": {
+    "task": "y",
+    "tau": 0.8,
+    "target_ev": 1.0,
+    "n_complementary_pairs": 25,
+    "min_positives": 5,
+    "min_pair_support": 10,
+    "n_grid": 30,
+    "ratio_min": 0.01,
+    "tol": 0.0001,
+    "max_iter": 1000
+  },
+  "elapsed_sec": 109.51
+}

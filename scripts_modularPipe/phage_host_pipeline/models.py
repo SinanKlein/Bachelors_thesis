@@ -1,105 +1,145 @@
-"""
-Model registry.
+"""Model registry. Binary models expose fit/predict_proba, regressors fit/predict.
 
-Two interfaces depending on task_type:
-  binary classifier:  .fit(X, y) -> self,  .predict_proba(X)  
-  regressor:          .fit(X, y) -> self,  .predict(X)       -
-Each model class declares its task_type so the experiment runner only
-applies it to matching tasks.
-
-Adding a model = one class + one entry in MODELS at the bottom.
+Adding a model = one class here + one entry in MODELS + one entry in config.yaml.
 """
 from __future__ import annotations
-import warnings
+
 import random
+import warnings
+
 import numpy as np
 from sklearn.linear_model import LogisticRegression, Ridge
+from sklearn.metrics import log_loss, roc_auc_score
+from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 
-
-warnings.filterwarnings(
-    "ignore", category=FutureWarning,
-    message=".*penalty.*was deprecated.*",
-)
-warnings.filterwarnings(
-    "ignore", category=UserWarning,
-    message=".*Inconsistent values: penalty.*",
-)
+warnings.filterwarnings("ignore", category=FutureWarning, message=".*penalty.*was deprecated.*")
+warnings.filterwarnings("ignore", category=UserWarning, message=".*Inconsistent values: penalty.*")
 
 
-# ---------------------------------------------------------------------------
-# Base interfaces
-# ---------------------------------------------------------------------------
-class BaseClassifier:
-    name: str = "base_clf"
-    task_type: str = "binary"
+# =============================================================================
+# Linear models
+# =============================================================================
+class SparseLogistic:
+    """L1 logistic regression (standardised, balanced class weights).
 
-    def fit(self, X, y):  raise NotImplementedError
-    def predict_proba(self, X):  raise NotImplementedError
+    With `lambda_cv.enabled`, the penalty is chosen by K-fold CV inside the
+    training data over a grid of lambda / lambda_max ratios, then refit.
+    """
 
-
-class BaseRegressor:
-    name: str = "base_reg"
-    task_type: str = "regression"
-
-    def fit(self, X, y):  raise NotImplementedError
-    def predict(self, X):  raise NotImplementedError
-
-
-# ---------------------------------------------------------------------------
-# Classifiers
-# ---------------------------------------------------------------------------
-class SparseLogistic(BaseClassifier):
-    name = "sparse_logistic"
-    task_type = "binary"
-
-    def __init__(self, C=1.0, penalty="l1", solver="liblinear",
-                 max_iter=2000, random_state=None, **_):
-        self.C = C
-        self.penalty = penalty
-        self.solver = solver
-        self.max_iter = max_iter
+    def __init__(self, C=1.0, penalty="l1", solver="liblinear", max_iter=2000,
+                 random_state=None, lambda_cv=None, **_):
+        self.C, self.penalty, self.solver, self.max_iter = C, penalty, solver, max_iter
         self.random_state = random_state
-        self._scaler = StandardScaler()
-        self._model = None
+        self.lambda_cv = lambda_cv if lambda_cv and lambda_cv.get("enabled", True) else None
+        self.cv_record, self.cv_curve = None, []
+
+    def _logreg(self, C):
+        return LogisticRegression(C=C, penalty=self.penalty, solver=self.solver,
+                                  max_iter=self.max_iter, class_weight="balanced",
+                                  random_state=self.random_state)
+
+    @staticmethod
+    def _lambda_max(Xs, y):
+        return float(np.abs(Xs.T @ (np.asarray(y, float) - np.mean(y))).max() / len(y))
+
+    def _choose_C(self, X, y):
+        cfg = self.lambda_cv
+        k, n_points = int(cfg.get("n_inner", 3)), int(cfg.get("n_points", 8))
+        metric, rule = str(cfg.get("metric", "auc")).lower(), str(cfg.get("rule", "1se")).lower()
+        y = np.asarray(y).astype(int)
+        if len(np.unique(y)) < 2 or np.bincount(y).min() < k:
+            return self.C                                   # too small to tune
+
+        ratios = np.exp(np.linspace(0.0, np.log(float(cfg.get("ratio_min", 0.05))), n_points))
+        seed = 0 if self.random_state is None else int(self.random_state)
+        folds = list(StratifiedKFold(k, shuffle=True, random_state=seed).split(X, y))
+        scores = np.full((n_points, k), np.nan)
+        for i, r in enumerate(ratios):
+            for j, (tr, va) in enumerate(folds):
+                sc = StandardScaler().fit(X[tr])
+                A, B = sc.transform(X[tr]), sc.transform(X[va])
+                lmax = self._lambda_max(A, y[tr])
+                if not np.isfinite(lmax) or lmax <= 0:
+                    continue
+                pv = self._logreg(1.0 / (len(tr) * lmax * r)).fit(A, y[tr]).predict_proba(B)[:, 1]
+                if metric == "auc":
+                    if len(np.unique(y[va])) > 1:
+                        scores[i, j] = roc_auc_score(y[va], pv)
+                else:                                       # deviance, negated
+                    scores[i, j] = -2.0 * log_loss(y[va], np.clip(pv, 1e-9, 1 - 1e-9))
+
+        mu = np.nanmean(scores, axis=1)
+        if not np.isfinite(mu).any():
+            return self.C
+        se = np.nanstd(scores, axis=1, ddof=1) / np.sqrt(np.sum(~np.isnan(scores), axis=1))
+        best = int(np.nanargmax(mu))
+        if rule == "1se":   # largest lambda within one SE of the best
+            pick = int(np.flatnonzero(mu >= mu[best] - (se[best] if np.isfinite(se[best]) else 0.0)).min())
+        else:
+            pick = best
+
+        lmax_full = self._lambda_max(StandardScaler().fit_transform(X), y)
+        chosen_C = 1.0 / (len(y) * lmax_full * ratios[pick])
+        rnd = lambda v, d: round(float(v), d) if np.isfinite(v) else None
+        self.cv_curve = [{"metric": metric, "ratio": round(float(r), 6), "score_mean": rnd(m, 5),
+                          "score_se": rnd(s, 5), "is_min": i == best, "is_1se": i == pick}
+                         for i, (r, m, s) in enumerate(zip(ratios, mu, se))]
+        self.cv_record = {"metric": metric, "rule": rule, "n_inner": k, "n_points": n_points,
+                          "ratio_min": float(cfg.get("ratio_min", 0.05)),
+                          "lambda_max": round(lmax_full, 8),
+                          "chosen_ratio": round(float(ratios[pick]), 6), "chosen_C": float(chosen_C),
+                          "chosen_score": round(float(mu[pick]), 5),
+                          "best_ratio": round(float(ratios[best]), 6), "best_score": round(float(mu[best]), 5),
+                          "best_score_se": rnd(se[best], 5)}
+        return chosen_C
 
     def fit(self, X, y):
-        Xs = self._scaler.fit_transform(X)
-        self._model = LogisticRegression(
-            C=self.C, penalty=self.penalty, solver=self.solver,
-            max_iter=self.max_iter, class_weight="balanced",
-            random_state=self.random_state,
-        )
-        self._model.fit(Xs, y)
+        C = self._choose_C(np.asarray(X, dtype=float), y) if self.lambda_cv else self.C
+        self._scaler = StandardScaler()
+        self._model = self._logreg(C).fit(self._scaler.fit_transform(X), y)
+        if self.cv_record:
+            self.cv_record["n_nonzero"] = int((np.abs(self._model.coef_[0]) > 0).sum())
         return self
 
     def predict_proba(self, X):
-        Xs = self._scaler.transform(X)
-        return self._model.predict_proba(Xs)[:, 1]
+        return self._model.predict_proba(self._scaler.transform(X))[:, 1]
 
 
-class XGBClassifierWrap(BaseClassifier):
-    name = "xgb_clf"
-    task_type = "binary"
+class LinearRegressor:
+    """Standardised ridge regression."""
 
-    def __init__(self, n_estimators=500, max_depth=4, learning_rate=0.05,
-                 subsample=0.8, colsample_bytree=0.8, random_state=None, **_):
-        from xgboost import XGBClassifier
-        self._XGBClassifier = XGBClassifier
-        self.params = dict(
-            n_estimators=n_estimators, max_depth=max_depth,
-            learning_rate=learning_rate, subsample=subsample,
-            colsample_bytree=colsample_bytree,
-            eval_metric="logloss", n_jobs=4, verbosity=1,
-            random_state=random_state,
-        )
-        self._model = None
+    def __init__(self, alpha=1.0, random_state=None, **_):
+        self.alpha, self.random_state = alpha, random_state
 
     def fit(self, X, y):
-        n_pos = int(np.sum(y == 1))
-        n_neg = int(np.sum(y == 0))
-        spw = (n_neg / n_pos) if n_pos > 0 else 1.0
-        self._model = self._XGBClassifier(scale_pos_weight=spw, **self.params)
+        self._scaler = StandardScaler()
+        self._model = Ridge(alpha=self.alpha, random_state=self.random_state)
+        self._model.fit(self._scaler.fit_transform(X), y)
+        return self
+
+    def predict(self, X):
+        return self._model.predict(self._scaler.transform(X))
+
+
+# =============================================================================
+# XGBoost
+# =============================================================================
+XGB_DEFAULTS = dict(n_estimators=500, max_depth=4, learning_rate=0.05,
+                    subsample=0.8, colsample_bytree=0.8)
+
+
+class XGBClassifierWrap:
+    def __init__(self, random_state=None, **params):
+        self.params = {k: params.get(k, v) for k, v in XGB_DEFAULTS.items()}
+        self.random_state = random_state
+
+    def fit(self, X, y):
+        from xgboost import XGBClassifier
+        n_pos, n_neg = int(np.sum(y == 1)), int(np.sum(y == 0))
+        self._model = XGBClassifier(scale_pos_weight=n_neg / n_pos if n_pos else 1.0,
+                                    eval_metric="logloss", n_jobs=4, verbosity=1,
+                                    random_state=self.random_state, **self.params)
         self._model.fit(X, y)
         return self
 
@@ -107,219 +147,15 @@ class XGBClassifierWrap(BaseClassifier):
         return self._model.predict_proba(X)[:, 1]
 
 
-
-
-class TorchMLPBase:
-    """Small one-hidden-layer MLP using the same core hyperparameters as 07c.
-
-    This is intentionally a plain predictor, not a bottleneck model: there is no
-    information bottleneck. The post-ReLU hidden activation can be tapped as a
-    deterministic latent via encode_latent() for the latent-space analysis,
-    without altering the predictor (the forward path and weights are unchanged).
-    Architecture:
-        X -> Linear(input, hidden_dim) -> ReLU -> Dropout -> Linear(hidden_dim, 1)
-    """
-    def _set_seed(self):
-        if self.random_state is not None:
-            random.seed(int(self.random_state))
-            np.random.seed(int(self.random_state))
-            try:
-                import torch
-                torch.manual_seed(int(self.random_state))
-                torch.cuda.manual_seed_all(int(self.random_state))
-            except Exception:
-                pass
-
-    def _make_net(self, x_dim):
-        import torch.nn as nn
-        return nn.Sequential(
-            nn.Linear(x_dim, self.hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(self.dropout),
-            nn.Linear(self.hidden_dim, 1),
-        )
-
-    def encode_latent(self, X, batch_size=None):
-        """Return the post-ReLU hidden activation as a deterministic latent.
-
-        This is the concatenation-MLP whose post-ReLU hidden activation is the
-        (hidden_dim)-dimensional representation read straight out of the
-        trained network. It does not change the predictor; the forward path used
-        by predict_proba/predict is untouched.
-        """
-        import torch
-        if batch_size is None:
-            batch_size = self.batch_size * 8
-        Xs = self._scaler.transform(X).astype(np.float32)
-        hs = []
-        self._model.eval()
-        with torch.no_grad():
-            for start in range(0, Xs.shape[0], batch_size):
-                xb = torch.as_tensor(Xs[start:start + batch_size], dtype=torch.float32, device=self._device)
-                h = self._model[1](self._model[0](xb))
-                hs.append(h.cpu().numpy())
-        return np.vstack(hs)
-
-
-class MLPClassifier(BaseClassifier, TorchMLPBase):
-    name = "mlp_clf"
-    task_type = "binary"
-
-    def __init__(self, hidden_dim=64, dropout=0.3, batch_size=512, lr=3e-4,
-                 weight_decay=1e-3, n_epochs=200, random_state=None, **_):
-        self.hidden_dim = int(hidden_dim)
-        self.dropout = float(dropout)
-        self.batch_size = int(batch_size)
-        self.lr = float(lr)
-        self.weight_decay = float(weight_decay)
-        self.n_epochs = int(n_epochs)
+class XGBRegressorWrap:
+    def __init__(self, random_state=None, **params):
+        self.params = {k: params.get(k, v) for k, v in XGB_DEFAULTS.items()}
         self.random_state = random_state
-        self._scaler = StandardScaler()
-        self._model = None
-        self._device = None
 
     def fit(self, X, y):
-        import torch
-        import torch.nn.functional as F
-        from torch.utils.data import TensorDataset, DataLoader
-
-        self._set_seed()
-        Xs = self._scaler.fit_transform(X).astype(np.float32)
-        y = np.asarray(y).astype(np.float32)
-        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        X_t = torch.as_tensor(Xs, dtype=torch.float32, device=self._device)
-        y_t = torch.as_tensor(y, dtype=torch.float32, device=self._device)
-        ds = TensorDataset(X_t, y_t)
-        loader = DataLoader(ds, batch_size=self.batch_size, shuffle=True)
-
-        self._model = self._make_net(X_t.shape[1]).to(self._device)
-        opt = torch.optim.AdamW(self._model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
-        pos_frac = float(y_t.mean().item())
-        pos_weight = torch.tensor((1.0 - pos_frac) / pos_frac, dtype=torch.float32, device=self._device) if pos_frac > 0 else None
-
-        for _ in range(self.n_epochs):
-            self._model.train()
-            for xb, yb in loader:
-                opt.zero_grad()
-                logits = self._model(xb).squeeze(-1)
-                loss = F.binary_cross_entropy_with_logits(logits, yb, pos_weight=pos_weight)
-                loss.backward()
-                opt.step()
-        return self
-
-    def predict_proba(self, X):
-        import torch
-        Xs = self._scaler.transform(X).astype(np.float32)
-        X_t = torch.as_tensor(Xs, dtype=torch.float32, device=self._device)
-        self._model.eval()
-        with torch.no_grad():
-            logits = self._model(X_t).squeeze(-1)
-            return torch.sigmoid(logits).cpu().numpy()
-
-# ---------------------------------------------------------------------------
-# Regressors
-# ---------------------------------------------------------------------------
-class LinearRegressor(BaseRegressor):
-    """
-    Ridge regression with standardization.
-    alpha=0 reduces to OLS. alpha>0 adds L2 penalty (helps when p > n
-    or features are correlated, which is the typical genomic case).
-    """
-    name = "linreg"
-    task_type = "regression"
-
-    def __init__(self, alpha=1.0, random_state=None, **_):
-        self.alpha = alpha
-        self.random_state = random_state
-        self._scaler = StandardScaler()
-        self._model = None
-
-    def fit(self, X, y):
-        Xs = self._scaler.fit_transform(X)
-        # Ridge accepts random_state for the 'sag'/'saga' solvers; for the
-        # default solver it's a no-op but harmless to pass.
-        self._model = Ridge(alpha=self.alpha, random_state=self.random_state)
-        self._model.fit(Xs, y)
-        return self
-
-    def predict(self, X):
-        Xs = self._scaler.transform(X)
-        return self._model.predict(Xs)
-
-
-class MLPRegressor(BaseRegressor, TorchMLPBase):
-    name = "mlp_reg"
-    task_type = "regression"
-
-    def __init__(self, hidden_dim=64, dropout=0.3, batch_size=512, lr=3e-4,
-                 weight_decay=1e-3, n_epochs=200, random_state=None, **_):
-        self.hidden_dim = int(hidden_dim)
-        self.dropout = float(dropout)
-        self.batch_size = int(batch_size)
-        self.lr = float(lr)
-        self.weight_decay = float(weight_decay)
-        self.n_epochs = int(n_epochs)
-        self.random_state = random_state
-        self._scaler = StandardScaler()
-        self._model = None
-        self._device = None
-
-    def fit(self, X, y):
-        import torch
-        import torch.nn.functional as F
-        from torch.utils.data import TensorDataset, DataLoader
-
-        self._set_seed()
-        Xs = self._scaler.fit_transform(X).astype(np.float32)
-        y = np.asarray(y).astype(np.float32)
-        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        X_t = torch.as_tensor(Xs, dtype=torch.float32, device=self._device)
-        y_t = torch.as_tensor(y, dtype=torch.float32, device=self._device)
-        ds = TensorDataset(X_t, y_t)
-        loader = DataLoader(ds, batch_size=self.batch_size, shuffle=True)
-
-        self._model = self._make_net(X_t.shape[1]).to(self._device)
-        opt = torch.optim.AdamW(self._model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
-
-        for _ in range(self.n_epochs):
-            self._model.train()
-            for xb, yb in loader:
-                opt.zero_grad()
-                pred = self._model(xb).squeeze(-1)
-                loss = F.mse_loss(pred, yb)
-                loss.backward()
-                opt.step()
-        return self
-
-    def predict(self, X):
-        import torch
-        Xs = self._scaler.transform(X).astype(np.float32)
-        X_t = torch.as_tensor(Xs, dtype=torch.float32, device=self._device)
-        self._model.eval()
-        with torch.no_grad():
-            return self._model(X_t).squeeze(-1).cpu().numpy()
-
-
-
-class XGBRegressorWrap(BaseRegressor):
-    name = "xgb_reg"
-    task_type = "regression"
-
-    def __init__(self, n_estimators=500, max_depth=4, learning_rate=0.05,
-                 subsample=0.8, colsample_bytree=0.8, random_state=None, **_):
         from xgboost import XGBRegressor
-        self._XGBRegressor = XGBRegressor
-        self.params = dict(
-            n_estimators=n_estimators, max_depth=max_depth,
-            learning_rate=learning_rate, subsample=subsample,
-            colsample_bytree=colsample_bytree,
-            objective="reg:squarederror", n_jobs=1, verbosity=0,
-            random_state=random_state,
-        )
-        self._model = None
-
-    def fit(self, X, y):
-        self._model = self._XGBRegressor(**self.params)
+        self._model = XGBRegressor(objective="reg:squarederror", n_jobs=1, verbosity=0,
+                                   random_state=self.random_state, **self.params)
         self._model.fit(X, y)
         return self
 
@@ -327,139 +163,137 @@ class XGBRegressorWrap(BaseRegressor):
         return self._model.predict(X)
 
 
-# ---------------------------------------------------------------------------
-# Registry
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-# Joint MLP baseline: one shared trunk, two heads (Y and W_class)
-# ---------------------------------------------------------------------------
-def _make_mlp_yw_net(x_dim, hidden_dim, dropout):
-    import torch.nn as nn
-    class Net(nn.Module):
-        def __init__(self):
-            super().__init__()
-            self.lin   = nn.Linear(x_dim, hidden_dim)
-            self.act   = nn.ReLU()
-            self.drop  = nn.Dropout(dropout)
-            self.head_y = nn.Linear(hidden_dim, 1)
-            self.head_w = nn.Linear(hidden_dim, 1)
-        def encode(self, X):
-            # post-ReLU hidden activation = the shared joint latent (pre-dropout,
-            # matching the separate-MLP encode_latent convention).
-            return self.act(self.lin(X))
-        def forward(self, X):
-            h = self.drop(self.encode(X))
-            return self.head_y(h).squeeze(-1), self.head_w(h).squeeze(-1)
-    return Net()
+# =============================================================================
+# MLPs: Linear -> ReLU -> Dropout -> one Linear head per target
+# =============================================================================
+class TorchMLP:
+    """One-hidden-layer MLP. `losses` gives one head per target ("bce" or "mse").
 
-
-class MLPYWJoint:
-    """Plain MLP with a shared hidden trunk and two classification heads.
-
-    This is the joint counterpart to the separate mlp_clf / mlp_reg baselines:
-    a single Linear->ReLU->Dropout trunk feeds a Y head and a W-class head, both
-    trained with BCE. The shared post-ReLU hidden activation is the joint latent
-    exported for analysis (encode_latent), directly comparable to the single-task
-    mlp_latent_y and mlp_latent_w_class latents.
+    The post-ReLU hidden activation is exposed as the latent (encode_latent).
     """
-    name = "mlp_yw_joint"
-    task_type = "joint_y_w"
+    losses: tuple = ()
 
     def __init__(self, hidden_dim=64, dropout=0.3, batch_size=512, lr=3e-4,
-                 weight_decay=1e-3, n_epochs=200, lambda_y=1.0, lambda_w=1.0,
-                 random_state=None, **_):
-        self.hidden_dim = int(hidden_dim)
-        self.dropout = float(dropout)
-        self.batch_size = int(batch_size)
-        self.lr = float(lr)
-        self.weight_decay = float(weight_decay)
-        self.n_epochs = int(n_epochs)
-        self.lambda_y = float(lambda_y)
-        self.lambda_w = float(lambda_w)
-        self.random_state = random_state
-        self._scaler = StandardScaler()
-        self._model = None
-        self._device = None
+                 weight_decay=1e-3, n_epochs=200, random_state=None, weights=None, **_):
+        self.hidden_dim, self.dropout = int(hidden_dim), float(dropout)
+        self.batch_size, self.lr, self.weight_decay = int(batch_size), float(lr), float(weight_decay)
+        self.n_epochs, self.random_state = int(n_epochs), random_state
+        self.weights = weights or [1.0] * len(self.losses)
 
-    def _set_seed(self):
+    def _net(self, x_dim):
+        import torch.nn as nn
+
+        class Net(nn.Module):
+            def __init__(s):
+                super().__init__()
+                s.lin = nn.Linear(x_dim, self.hidden_dim)
+                s.act = nn.ReLU()
+                s.drop = nn.Dropout(self.dropout)
+                s.heads = nn.ModuleList([nn.Linear(self.hidden_dim, 1) for _ in self.losses])
+
+            def encode(s, x):
+                return s.act(s.lin(x))
+
+            def forward(s, x):
+                h = s.drop(s.encode(x))
+                return [head(h).squeeze(-1) for head in s.heads]
+        return Net()
+
+    def _tensor(self, X):
+        import torch
+        return torch.as_tensor(self._scaler.transform(X).astype(np.float32),
+                               dtype=torch.float32, device=self._device)
+
+    def fit(self, X, *targets):
+        import torch
+        import torch.nn.functional as F
+        from torch.utils.data import DataLoader, TensorDataset
+
         if self.random_state is not None:
             random.seed(int(self.random_state))
             np.random.seed(int(self.random_state))
-            try:
-                import torch
-                torch.manual_seed(int(self.random_state))
-                torch.cuda.manual_seed_all(int(self.random_state))
-            except Exception:
-                pass
-
-    def fit(self, X, y, w):
-        import torch
-        import torch.nn.functional as F
-        from torch.utils.data import TensorDataset, DataLoader
-
-        self._set_seed()
+            torch.manual_seed(int(self.random_state))
+            torch.cuda.manual_seed_all(int(self.random_state))
+        self._scaler = StandardScaler()
         Xs = self._scaler.fit_transform(X).astype(np.float32)
-        y = np.asarray(y).astype(np.float32)
-        w = np.asarray(w).astype(np.float32)
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         X_t = torch.as_tensor(Xs, dtype=torch.float32, device=self._device)
-        y_t = torch.as_tensor(y, dtype=torch.float32, device=self._device)
-        w_t = torch.as_tensor(w, dtype=torch.float32, device=self._device)
-        loader = DataLoader(TensorDataset(X_t, y_t, w_t),
-                            batch_size=self.batch_size, shuffle=True)
-        self._model = _make_mlp_yw_net(X_t.shape[1], self.hidden_dim, self.dropout).to(self._device)
+        T = [torch.as_tensor(np.asarray(t).astype(np.float32), dtype=torch.float32,
+                             device=self._device) for t in targets]
+        loader = DataLoader(TensorDataset(X_t, *T), batch_size=self.batch_size, shuffle=True)
+        self._model = self._net(X_t.shape[1]).to(self._device)
         opt = torch.optim.AdamW(self._model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
 
-        def _posw(t):
+        pos_w = []                      # BCE weight = n_neg / n_pos
+        for kind, t in zip(self.losses, T):
             f = float(t.mean().item())
-            return torch.tensor((1.0 - f) / f, dtype=torch.float32, device=self._device) if 0.0 < f < 1.0 else None
-        pw_y, pw_w = _posw(y_t), _posw(w_t)
+            pos_w.append(torch.tensor((1.0 - f) / f, dtype=torch.float32, device=self._device)
+                         if kind == "bce" and 0.0 < f < 1.0 else None)
 
         for _ in range(self.n_epochs):
             self._model.train()
-            for xb, yb, wb in loader:
+            for xb, *tb in loader:
                 opt.zero_grad()
-                logit_y, logit_w = self._model(xb)
-                loss_y = F.binary_cross_entropy_with_logits(logit_y, yb, pos_weight=pw_y)
-                loss_w = F.binary_cross_entropy_with_logits(logit_w, wb, pos_weight=pw_w)
-                loss = self.lambda_y * loss_y + self.lambda_w * loss_w
-                loss.backward(); opt.step()
+                losses = [F.binary_cross_entropy_with_logits(o, t, pos_weight=pw) if kind == "bce"
+                          else F.mse_loss(o, t)
+                          for kind, o, t, pw in zip(self.losses, self._model(xb), tb, pos_w)]
+                loss = losses[0] if len(losses) == 1 else self.weights[0] * losses[0]
+                for w, l in zip(self.weights[1:], losses[1:]):
+                    loss = loss + w * l
+                loss.backward()
+                opt.step()
         return self
 
-    def predict(self, X):
+    def _outputs(self, X, sigmoid=False):
         import torch
-        Xs = self._scaler.transform(X).astype(np.float32)
-        X_t = torch.as_tensor(Xs, dtype=torch.float32, device=self._device)
         self._model.eval()
         with torch.no_grad():
-            logit_y, logit_w = self._model(X_t)
-            return {
-                "y_prob": torch.sigmoid(logit_y).cpu().numpy(),
-                "w_pred": torch.sigmoid(logit_w).cpu().numpy(),
-            }
+            out = self._model(self._tensor(X))
+            return [(torch.sigmoid(o) if sigmoid else o).cpu().numpy() for o in out]
 
     def encode_latent(self, X, batch_size=None):
         import torch
-        if batch_size is None:
-            batch_size = self.batch_size * 8
-        Xs = self._scaler.transform(X).astype(np.float32)
-        hs = []
+        bs = batch_size or self.batch_size * 8
         self._model.eval()
         with torch.no_grad():
-            for start in range(0, Xs.shape[0], batch_size):
-                xb = torch.as_tensor(Xs[start:start + batch_size], dtype=torch.float32, device=self._device)
-                hs.append(self._model.encode(xb).cpu().numpy())
-        return np.vstack(hs)
+            return np.vstack([self._model.encode(self._tensor(X[i:i + bs])).cpu().numpy()
+                              for i in range(0, X.shape[0], bs)])
+
+
+class MLPClassifier(TorchMLP):
+    losses = ("bce",)
+
+    def predict_proba(self, X):
+        return self._outputs(X, sigmoid=True)[0]
+
+
+class MLPRegressor(TorchMLP):
+    losses = ("mse",)
+
+    def predict(self, X):
+        return self._outputs(X)[0]
+
+
+class MLPYWJoint(MLPClassifier):
+    """Shared trunk, one BCE head for y and one for w_class."""
+    losses = ("bce", "bce")
+
+    def __init__(self, lambda_y=1.0, lambda_w=1.0, **kw):
+        super().__init__(weights=[float(lambda_y), float(lambda_w)], **kw)
+
+    def predict(self, X):
+        y_prob, w_prob = self._outputs(X, sigmoid=True)
+        return {"y_prob": y_prob, "w_pred": w_prob}
 
 
 MODELS = {
     "sparse_logistic": SparseLogistic,
-    "xgb_clf":         XGBClassifierWrap,
-    "mlp_clf":         MLPClassifier,
-    "linreg":          LinearRegressor,
-    "xgb_reg":         XGBRegressorWrap,
-    "mlp_reg":         MLPRegressor,
-    "mlp_yw_joint":    MLPYWJoint,
+    "xgb_clf": XGBClassifierWrap,
+    "mlp_clf": MLPClassifier,
+    "linreg": LinearRegressor,
+    "xgb_reg": XGBRegressorWrap,
+    "mlp_reg": MLPRegressor,
+    "mlp_yw_joint": MLPYWJoint,
 }
 
 

@@ -1,0 +1,13 @@
+[shuffle] fold 0 done
+[shuffle] fold 1 done
+[shuffle] fold 2 done
+[shuffle] fold 3 done
+[shuffle] fold 4 done
+[shuffle] fold 5 done
+[shuffle] fold 6 done
+[shuffle] fold 7 done
+[shuffle] fold 8 done
+[shuffle] fold 9 done
+cohort    head  n_folds  auc_real  auc_shuffled  auc_diff  auc_diff_sd  folds_real_higher  p_paired  ap_real  ap_shuffled  shuffled_auc_min  shuffled_auc_max  n_shuffles
+   CRC       y       10    0.7754        0.4759    0.2994       0.0442                 10    0.0000   0.2527       0.0418            0.4429            0.4939           5
+   CRC w_class       10    0.5864        0.5795    0.0068       0.0137                  8    0.1496   0.5008       0.4961            0.5761            0.5858           5

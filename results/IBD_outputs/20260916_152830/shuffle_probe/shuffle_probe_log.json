@@ -1,0 +1,8 @@
+{
+  "cohort": "IBD",
+  "run_id": "20260916_152830",
+  "n_shuffles": 5,
+  "epochs_override": null,
+  "base_seed": 42,
+  "elapsed_sec": 1461.0
+}
