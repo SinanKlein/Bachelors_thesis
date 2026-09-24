@@ -1,5 +1,7 @@
 # Predicting phage–bacteria interactions from proteome representations
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22939428.svg)](https://doi.org/10.5281/zenodo.22939428)
+
 Bachelor's thesis, LMU Munich — Sinan Klein.
 
 Two proxies for bacteria–virus interaction are predicted from the same protein-cluster representation,
@@ -40,7 +42,8 @@ package versions in `<run>/provenance/`.
 ## Data
 
 The input data (protein-cluster matrices, CRISPR matrices, glasso networks) and the full outputs of run
-`20260916_152830` are not in this repository; they are archived on Zenodo (DOI: to be added). `python data.py build` regenerates `graph_data.npz` from it.
+`20260916_152830` are not in this repository; they are archived on Zenodo: https://doi.org/10.5281/zenodo.22939428.
+`python data.py build` regenerates `graph_data.npz` from it.
 The CRISPR and glasso networks were provided by the supervising group.
 
 ## Results in this repository
