@@ -11,17 +11,21 @@ suppressPackageStartupMessages({
 
 `%||%` <- function(a, b) if (is.null(a)) b else a
 
-# Same root and override variable as common.py.
+# Same root and override variable as common.py: default <pipeline>/outputs,
+# located relative to this script (plots/), else relative to the working directory.
+.script_file <- sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1])
+.plots_dir <- if (!is.na(.script_file)) dirname(normalizePath(.script_file)) else getwd()
 RESULTS_DIR <- Sys.getenv("PIPELINE_RESULTS_DIR",
-                          unset = "C:/Sinan_Klein/LMU/lmu_thesis/results_modularPipe")
+                          unset = file.path(dirname(.plots_dir), "outputs"))
+RESULTS_DIR <- normalizePath(RESULTS_DIR, winslash = "/", mustWork = FALSE)
 
 .args <- commandArgs(trailingOnly = TRUE)
 DATASET_NAME <- if (length(.args) >= 2 && nzchar(.args[2])) .args[2] else "IBD_outputs"
 
 RESPONSE_LABELS <- c(
   y       = "CRISPR linkage",
-  w_class = "glasso edge (binarised)",
-  w_reg   = "glasso edge probability"
+  w_class = "abundance edge (binarised)",
+  w_reg   = "edge selection probability"
 )
 
 response_label <- function(x) {

@@ -242,7 +242,7 @@ local({
       geom_histogram(bins = 50, fill = col_source[["Xb"]],
                      alpha = 0.8, color = NA) +
       geom_vline(xintercept = 0, linetype = "dashed", color = "grey30") +
-      labs(x = "glasso edge probability", y = "count"
+      labs(x = "edge selection probability", y = "count"
       )
     ggsave(file.path(out, "08_W_distribution.png"), p8,
            width = 6.5, height = 4)
@@ -369,7 +369,7 @@ local({
     scale_y_reverse(expand = c(0, 0)) +
     scale_x_continuous(expand = c(0, 0)) +
     scale_fill_gradient(low = "#132B43", high = "#F5C518", na.value = "grey55",
-                        name = "glasso edge\nprobability", limits = c(0, 1)) +
+                        name = "edge selection\nprobability", limits = c(0, 1)) +
     labs(x = sprintf("viruses   (m = %d, clustered on W)", ncol(Wm)),
          y = sprintf("bacteria   (n = %d, clustered on W)", nrow(Wm)))
   ggsave(file.path(out, "interaction_W_matrix.png"), pW, width = 7.5, height = 6, dpi = 150)
@@ -442,7 +442,7 @@ local({
     scale_y_reverse(expand = c(0, 0)) +
     scale_x_continuous(expand = c(0, 0)) +
     scale_fill_gradient(low = "#132B43", high = "#F5C518", na.value = "black",
-                        name = "glasso edge\nprobability", limits = c(0, 1)) +
+                        name = "edge selection\nprobability", limits = c(0, 1)) +
     labs(x = sprintf("viruses   (m = %d, sorted by degree)", ncol(Wpres)),
          y = sprintf("bacteria   (n = %d, sorted by degree)", nrow(Wpres)))
   ggsave(file.path(out, "nestedness_W.png"), pNW, width = 7.5, height = 6, dpi = 150)
@@ -462,7 +462,7 @@ local({
       scale_y_reverse(expand = c(0, 0)) +
       scale_x_continuous(expand = c(0, 0)) +
       scale_fill_gradient(low = "#132B43", high = "#F5C518",
-                          name = "glasso edge\nprobability", limits = c(0, 1)) +
+                          name = "edge selection\nprobability", limits = c(0, 1)) +
       labs(x = sprintf("viruses   (m = %d, sorted by degree)", ncol(Wsub)),
            y = sprintf("bacteria   (n = %d, sorted by degree)", nrow(Wsub))) +
       theme(axis.title = element_text(size = 20, face = "bold"))

@@ -214,6 +214,9 @@ class TorchMLP:
             np.random.seed(int(self.random_state))
             torch.manual_seed(int(self.random_state))
             torch.cuda.manual_seed_all(int(self.random_state))
+        # Deterministic kernels (no effect on CPU runs; removes cuDNN nondeterminism on GPU).
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
         self._scaler = StandardScaler()
         Xs = self._scaler.fit_transform(X).astype(np.float32)
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

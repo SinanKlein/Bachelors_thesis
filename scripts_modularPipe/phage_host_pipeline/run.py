@@ -6,15 +6,18 @@ Every stage is also runnable on its own with the same --config / --run-id.
 """
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 import sys
 import time
-from pathlib import Path
 
-from common import DATASET_NAME, GRAPH_DATA_FILE, PIPELINE_DIR, RESULTS_DIR, make_run_id
+from common import (COHORT_DIR, DATASET_NAME, GRAPH_DATA_FILE, PIPELINE_DIR, RESULTS_DIR,
+                    make_run_id)
 
 CONFIG = PIPELINE_DIR / "config.yaml"
-R_EXECUTABLE = r"C:/PROGRA~1/R/R-45~1.1/bin/x64/Rscript.exe"
+# Rscript from the RSCRIPT environment variable, else from PATH.
+R_EXECUTABLE = os.environ.get("RSCRIPT") or shutil.which("Rscript")
 
 # Stage toggles.
 REBUILD_GRAPH_DATA = True
@@ -22,6 +25,7 @@ RUN_W_THRESHOLD = True
 RUN_SHUFFLE = True
 RUN_DESCRIBE = True
 RUN_STABILITY = True
+RUN_CKA = True
 RUN_R_PLOTS = True
 
 
@@ -39,11 +43,14 @@ def main() -> None:
     run_id, py, t0 = make_run_id(), sys.executable, time.time()
     args = ["--config", CONFIG, "--run-id", run_id]
     print(f"dataset = {DATASET_NAME} | run_id = {run_id}")
+    print(f"inputs  = {COHORT_DIR}\ngraph   = {GRAPH_DATA_FILE}\noutputs = {RESULTS_DIR}")
 
     if REBUILD_GRAPH_DATA or not GRAPH_DATA_FILE.exists():
         run("build graph data", [py, PIPELINE_DIR / "data.py", "build"])
     run("preprocess", [py, PIPELINE_DIR / "data.py", "preprocess", *args])
     run("experiment + latent export", [py, PIPELINE_DIR / "experiment.py", *args])
+    if RUN_CKA:
+        run("cka", [py, PIPELINE_DIR / "analyses.py", "cka", *args], required=False)
     for flag, stage in ((RUN_W_THRESHOLD, "w_threshold"), (RUN_SHUFFLE, "shuffle")):
         if flag:
             run(stage, [py, PIPELINE_DIR / "analyses.py", stage, *args], required=False)
@@ -52,8 +59,8 @@ def main() -> None:
     if RUN_STABILITY:
         run("stability", [py, PIPELINE_DIR / "analyses.py", "stability", *args], required=False)
 
-    if RUN_R_PLOTS and not Path(R_EXECUTABLE).exists():
-        print(f"[warn] Rscript not found at {R_EXECUTABLE}; skipping plots.")
+    if RUN_R_PLOTS and not R_EXECUTABLE:
+        print("[warn] Rscript not on PATH (set RSCRIPT to its full path); skipping plots.")
     elif RUN_R_PLOTS:
         for script in ("data.R", "results.R", "analyses.R"):
             run(f"plots/{script}", [R_EXECUTABLE, PIPELINE_DIR / "plots" / script, run_id, DATASET_NAME],

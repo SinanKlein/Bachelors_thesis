@@ -4,8 +4,8 @@
 #   bash run_cloud.sh              # CRC GvHD IBD
 #   bash run_cloud.sh CRC IBD
 #
-# Env: CONFIG, PY, RSCRIPT, RUN_ID, RUN_SHUFFLE (1), SKIP_GRAPH_DATA (1 = reuse graph_data.npz),
-#      PIPELINE_DATA_ROOT / PIPELINE_SPLITS_ROOT / PIPELINE_RESULTS_DIR (see common.py).
+# Env: CONFIG, PY, RSCRIPT, RUN_ID, RUN_SHUFFLE (1), SKIP_GRAPH_DATA (0 = rebuild graph_data.npz, 1 = reuse it),
+#      PIPELINE_DATA_ROOT / PIPELINE_GRAPH_ROOT / PIPELINE_RESULTS_DIR (see README, Paths).
 # Logs: logs/<run_id>/<cohort>.<stage>.log
 set -uo pipefail
 
@@ -13,9 +13,10 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG="${CONFIG:-$HERE/config.yaml}"
 PY="${PY:-python}"
 RSCRIPT="${RSCRIPT:-Rscript}"
-RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)}"
+GIT_HASH="$(git -C "$HERE" rev-parse --short HEAD 2>/dev/null || echo nogit)"
+RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)_$GIT_HASH}"   # same format as run.py
 RUN_SHUFFLE="${RUN_SHUFFLE:-1}"
-SKIP_GRAPH_DATA="${SKIP_GRAPH_DATA:-1}"
+SKIP_GRAPH_DATA="${SKIP_GRAPH_DATA:-0}"   # 0 = rebuild graph_data.npz from the raw tables (as run.py)
 COHORTS=("$@"); [[ ${#COHORTS[@]} -eq 0 ]] && COHORTS=(CRC GvHD IBD)
 LOGDIR="$HERE/logs/$RUN_ID"; mkdir -p "$LOGDIR"
 
@@ -46,6 +47,8 @@ run_cohort () {
   [[ "$RUN_SHUFFLE" == "1" ]] && { stage "$C" shuffle "$PY" analyses.py shuffle "${A[@]}" & pids+=($!); }
   local rc=0; for p in "${pids[@]}"; do wait "$p" || rc=1; done
   [[ $rc -eq 0 ]] || { echo "[$C] a parallel stage failed"; return 1; }
+
+  stage "$C" cka "$PY" analyses.py cka "${A[@]}"
 
   stage "$C" describe "$PY" data.py describe "${A[@]}"
   if command -v "$RSCRIPT" >/dev/null 2>&1; then

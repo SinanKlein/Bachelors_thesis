@@ -11,6 +11,8 @@ env/
 
 # Pipeline outputs
 results_modularPipe/
+inputs/
+outputs/
 logs/
 *.npz
 

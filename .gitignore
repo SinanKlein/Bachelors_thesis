@@ -7,6 +7,7 @@ results_modularPipe/
 results_cloud/
 results_gcloud_20260916/
 thesis_writing_impr/
+zenodo_upload/
 *.tgz
 
 # ---- results: plots, metrics, configs and run logs only ----------------------

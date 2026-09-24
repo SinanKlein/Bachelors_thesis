@@ -18,7 +18,6 @@ both vocabularies, as presence/absence, summed over the two partners.
 
 ```
 scripts_modularPipe/phage_host_pipeline/   the pipeline (see its README)
-thesis_writing/                            LaTeX source, figures, bibliography
 results/<cohort>_outputs/20260916_152830/  plots, metrics, configs per cohort
 results/logs/20260916_152830/              one log per stage and cohort
 ```
@@ -32,14 +31,16 @@ python run.py                  # one cohort (set in common.py or PIPELINE_COHORT
 bash run_cloud.sh              # all three cohorts in parallel (Linux)
 ```
 
-Paths and the cohort are set in `common.py` and can be overridden with the environment variables
-`PIPELINE_COHORT`, `PIPELINE_DATA_ROOT`, `PIPELINE_SPLITS_ROOT` and `PIPELINE_RESULTS_DIR`.
-All model and analysis settings are in `config.yaml`.
+No path is hardcoded: inputs are read from `inputs/<cohort>/` and results written to `outputs/` next to
+the pipeline, or from/to the folders given by `PIPELINE_DATA_ROOT`, `PIPELINE_GRAPH_ROOT` and
+`PIPELINE_RESULTS_DIR` (cohort: `PIPELINE_COHORT`). See the pipeline README, section *Paths*.
+All model and analysis settings are in `config.yaml`. Every run records its git commit, config hash and
+package versions in `<run>/provenance/`.
 
 ## Data
 
-The input data (abundance tables, CRISPR matrices, protein clusters, glasso networks) is not in this
-repository and is archived separately. `python data.py build` regenerates `graph_data.npz` from it.
+The input data (protein-cluster matrices, CRISPR matrices, glasso networks) and the full outputs of run
+`20260916_152830` are not in this repository; they are archived on Zenodo (DOI: to be added). `python data.py build` regenerates `graph_data.npz` from it.
 The CRISPR and glasso networks were provided by the supervising group.
 
 ## Results in this repository

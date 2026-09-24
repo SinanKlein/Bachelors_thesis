@@ -15,7 +15,7 @@ import pandas as pd
 import yaml
 
 from common import (COHORT, COHORT_DIR, GRAPH_DATA_FILE, load_config, load_npz,
-                    make_splits, run_dir, stage_args, write_csv, write_json)
+                    make_splits, record_stage, run_dir, stage_args, write_csv, write_json)
 
 # =============================================================================
 # 1. build: raw X / Y / W tables -> graph_data.npz
@@ -342,6 +342,7 @@ if __name__ == "__main__":
         build()
     elif stage in ("preprocess", "describe"):
         args = stage_args().parse_args()
+        record_stage(args.run_id, stage, args.config)
         if stage == "preprocess":
             preprocess(load_config(args.config), args.run_id)
         else:

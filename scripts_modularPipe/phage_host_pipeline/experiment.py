@@ -15,7 +15,8 @@ import numpy as np
 import pandas as pd
 
 from common import (binary_metrics, cutoff_sweep, fold_seed, iter_folds, load_config,
-                    load_run, regression_metrics, run_dir, set_global_seeds, stage_args,
+                    load_run, record_stage, regression_metrics, run_dir, set_global_seeds,
+                    stage_args,
                     write_csv, write_json)
 from models import build_model
 
@@ -170,4 +171,5 @@ def export_latent(run_id, name, df, data, tasks) -> None:
 
 if __name__ == "__main__":
     args = stage_args().parse_args()
+    record_stage(args.run_id, "experiment", args.config)
     run(load_config(args.config), args.run_id)

@@ -36,7 +36,7 @@ save_metric_plot <- function(df, metric, label, task, auc_scale = FALSE) {
         scale_y_continuous(limits = c(0.4, 1.0), breaks = seq(0.4, 1.0, 0.1))
     }
     fname <- sprintf("%s_%s_%s.png", task, metric, variant)
-    ggsave(file.path(out, fname), p, width = 5.2, height = 4.2)
+    ggsave(file.path(out, fname), p, width = 4.6, height = 5.2)
     message("[results] wrote ", fname)
   }
 }

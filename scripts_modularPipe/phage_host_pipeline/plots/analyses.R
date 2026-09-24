@@ -55,10 +55,12 @@ local({
     scale_fill_manual(values = pal) +
     scale_x_continuous(limits = c(0, 1)) +
     scale_y_continuous(limits = c(0, 1)) +
-    labs(x = "binarisation threshold on the glasso edge probability", y = "AUC",
-         color = "model", fill = "model")
+    labs(x = "binarisation threshold", y = "AUC",
+         color = "model", fill = "model") +
+    theme(legend.position = "bottom", legend.direction = "vertical",
+          legend.title = element_blank())
   message(sprintf("[plot_analyses:w_threshold] %s", peak_txt))
-  ggsave(file.path(out, "w_threshold_auc.png"), p, width = 8, height = 5, dpi = 150)
+  ggsave(file.path(out, "w_threshold_auc.png"), p, width = 5.0, height = 6.0, dpi = 150)
   write_csv(agg, file.path(out, "w_threshold_auc_summary.csv"))
   message(sprintf("[plot_analyses:w_threshold] wrote %s", file.path(out, "w_threshold_auc.png")))
 })
@@ -73,7 +75,7 @@ local({
   }
   out <- out_dir(run_id, "plots", "shuffle_probe")
 
-  head_lab <- c(y = "CRISPR linkage", w_class = "glasso edge (binarised)")
+  head_lab <- c(y = "CRISPR linkage", w_class = "abundance edge (binarised)")
 
   # Shuffles averaged within a fold, so real and permuted pair up per fold.
   fold <- read_csv(sp_path, show_col_types = FALSE) %>%
@@ -102,7 +104,7 @@ local({
     scale_colour_manual(values = c(real = "#1B7F79", permuted = "#C24E4E"),
                         guide = "none") +
     scale_y_continuous(limits = c(0, 1)) +
-    facet_wrap(~ head) +
+    facet_wrap(~ head, ncol = 1) +
     labs(x = NULL, y = "AUC")
 
   if (!is.null(ann)) {
@@ -110,12 +112,12 @@ local({
                        inherit.aes = FALSE, size = 3.2)
   }
 
-  ggsave(file.path(out, "real_vs_permuted.png"), p, width = 8, height = 5, dpi = 150)
+  ggsave(file.path(out, "real_vs_permuted.png"), p, width = 5.0, height = 6.2, dpi = 150)
   message(sprintf("[plot_analyses:shuffle] wrote %s",
                   file.path(out, "real_vs_permuted.png")))
 })
 
-# 3. Stability selection
+# 3. Stability selection, coloured by the domain each protein cluster leans to
 local({
   sel_path <- run_path(run_id, "stability", "stability_selection.csv")
   if (!file.exists(sel_path)) {
@@ -133,39 +135,102 @@ local({
     tau <- lg$tau %||% tau
   }
 
-  # Top 25 features per variant; long names shortened to head..tail.
+  # Which domain does each cluster lean to?  feature_stats.csv holds, per cluster and
+  # per domain, the mean of the 0/1 presence column, i.e. the fraction of organisms of
+  # that domain carrying the cluster.  Prevalences are comparable even though the two
+  # node sets differ in size, so the cluster is called virus-heavy when it is carried
+  # by a larger share of the vOTUs than of the bacterial genera.
+  dom <- NULL
+  dom_path <- run_path(run_id, "preprocessing", "feature_stats.csv")
+  if (file.exists(dom_path)) {
+    fs <- read_csv(dom_path, show_col_types = FALSE) %>% filter(selected)
+    dom <- full_join(
+      fs %>% filter(source == "Xb") %>% select(feature = feature_name, prev_b = mean),
+      fs %>% filter(source == "Xv") %>% select(feature = feature_name, prev_v = mean),
+      by = "feature"
+    ) %>%
+      mutate(prev_b = coalesce(prev_b, 0),
+             prev_v = coalesce(prev_v, 0),
+             domain = case_when(prev_v > prev_b ~ "virus-heavy",
+                                prev_b > prev_v ~ "bacteria-heavy",
+                                TRUE            ~ "equal"))
+  } else {
+    message("[plot_analyses:stability] no feature_stats.csv; clusters left uncoloured.")
+  }
+
+  # Top 25 features per variant; long names shortened to head..tail for the axis.
   top <- sel %>%
     group_by(variant) %>%
     arrange(desc(selection_prob), .by_group = TRUE) %>%
     slice_head(n = 25) %>%
-    ungroup() %>%
-    mutate(feature = ifelse(nchar(feature) > 30,
-                            paste0(substr(feature, 1, 14), "..",
-                                   substr(feature, nchar(feature) - 11, nchar(feature))),
-                            feature),
-           feature = factor(feature, levels = rev(unique(feature[order(selection_prob)]))))
+    ungroup()
 
-  p <- ggplot(top, aes(x = selection_prob, y = feature,
-                       colour = selection_prob >= tau)) +
-    geom_segment(aes(x = 0, xend = selection_prob, yend = feature),
-                 linewidth = 0.4) +
-    geom_point(size = 2.2) +
-    geom_vline(xintercept = tau, linetype = "dashed", colour = "grey35", linewidth = 0.4) +
-    scale_colour_manual(values = c(`TRUE` = "#1B7F79", `FALSE` = "grey72"), guide = "none") +
-    scale_x_continuous(limits = c(0, 1)) +
-    facet_wrap(~ variant, scales = "free_y") +
-    labs(x = "selection probability", y = NULL)
+  if (!is.null(dom)) top <- left_join(top, dom, by = "feature")
+  if (!"domain" %in% names(top)) top$domain <- NA_character_
+  top$domain[is.na(top$domain)] <- "unknown"
 
-  h <- max(4, 0.18 * nrow(top) / length(unique(top$variant)) + 2)
+  top <- top %>%
+    mutate(label = ifelse(nchar(feature) > 20,
+                          paste0(substr(feature, 1, 9), "..",
+                                 substr(feature, nchar(feature) - 8, nchar(feature))),
+                          feature),
+           label = factor(label, levels = rev(unique(label[order(selection_prob)]))))
+
+  DOMAIN_COLORS <- c(`bacteria-heavy` = "#4C78A8", `virus-heavy` = "#F58518",
+                     equal = "#8C8C8C", unknown = "#BAB0AC")
+  present <- intersect(names(DOMAIN_COLORS), unique(top$domain))
+
+  # Drawn to stay legible when three cohorts sit side by side on one slide: a small
+  # canvas (so every element is large relative to the width it is shown at), heavy
+  # points and segments, and the legend underneath rather than beside the panel.
+  p <- ggplot(top, aes(x = selection_prob, y = label, colour = domain)) +
+    geom_segment(aes(x = 0, xend = selection_prob, yend = label), linewidth = 1.1) +
+    geom_point(aes(shape = selection_prob >= tau), size = 4.2, stroke = 1.5) +
+    geom_vline(xintercept = tau, linetype = "dashed", colour = "grey35", linewidth = 0.7) +
+    scale_colour_manual(values = DOMAIN_COLORS, breaks = present, name = NULL) +
+    scale_shape_manual(values = c(`FALSE` = 1, `TRUE` = 16),
+                       breaks = c("FALSE", "TRUE"),
+                       labels = c(sprintf("< %.2f", tau), sprintf("\u2265 %.2f", tau)),
+                       name = NULL) +
+    scale_x_continuous(limits = c(0, 1), breaks = c(0, 0.5, 1)) +
+    labs(x = "selection probability", y = NULL) +
+    guides(colour = guide_legend(order = 1, override.aes = list(shape = 16, size = 5)),
+           shape  = guide_legend(order = 2)) +
+    theme(legend.position  = "bottom",
+          legend.direction = "horizontal",
+          legend.box       = "vertical",
+          legend.text      = element_text(size = 16),
+          axis.text.y      = element_text(size = 11),
+          axis.text.x      = element_text(size = 15),
+          axis.title.x     = element_text(size = 16),
+          plot.margin      = margin(6, 10, 4, 4))
+  if (length(unique(top$variant)) > 1) {
+    p <- p + facet_wrap(~ variant, scales = "free_y") +
+      theme(strip.text = element_text(size = 15))
+  }
+
   ggsave(file.path(out, "stability_selection.png"), p,
-         width = 11, height = h, dpi = 150, limitsize = FALSE)
+         width = 6.4, height = 6.8, dpi = 170, limitsize = FALSE)
   message(sprintf("[plot_analyses:stability] wrote %s",
                   file.path(out, "stability_selection.png")))
+
+  # The domain call for every selected feature, so the colours can be checked.
+  if (!is.null(dom)) {
+    write_csv(sel %>% left_join(dom, by = "feature"),
+              file.path(out, "stability_selection_domain.csv"))
+  }
 
   for (v in unique(sel$variant)) {
     n <- sum(sel$variant == v & sel$stable)
     message(sprintf("[plot_analyses:stability] %-18s %d feature(s) with prob >= %.2f",
                     v, n, tau))
+  }
+  if (!is.null(dom)) {
+    tb <- top %>% count(variant, domain)
+    for (k in seq_len(nrow(tb))) {
+      message(sprintf("[plot_analyses:stability] %-18s top 25: %2d %s",
+                      tb$variant[k], tb$n[k], tb$domain[k]))
+    }
   }
 })
 

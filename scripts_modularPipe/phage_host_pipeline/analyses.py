@@ -16,7 +16,8 @@ import numpy as np
 import pandas as pd
 
 from common import (DATASET_NAME, binary_metrics, fold_seed, iter_folds, load_config,
-                    load_run, run_dir, set_global_seeds, stage_args, write_csv, write_json)
+                    load_run, record_stage, run_dir, set_global_seeds, stage_args, write_csv,
+                    write_json)
 from models import MLPYWJoint
 
 warnings.filterwarnings("ignore", category=FutureWarning, message=".*penalty.*was deprecated.*")
@@ -389,6 +390,7 @@ if __name__ == "__main__":
     elif stage not in ("w_threshold", "cka"):
         raise SystemExit(__doc__)
     args = ap.parse_args()
+    record_stage(args.run_id, stage, args.config)
     cfg = load_config(args.config)
     if stage == "w_threshold":
         w_threshold(cfg, args.run_id)
